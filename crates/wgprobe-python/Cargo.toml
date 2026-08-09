@@ -1,6 +1,6 @@
 [package]
 name = "wgprobe-python"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 description = "Optional PyO3 bindings for wgprobe"
 license.workspace = true
@@ -16,5 +16,5 @@ extension-module = ["pyo3/extension-module"]
 [dependencies]
 pyo3 = { version = "0.29.0", features = ["abi3-py310"] }
 serde_json.workspace = true
-wgprobe = { version = "0.1.0", path = "../wgprobe" }
+wgprobe = { version = "0.1.1", path = "../wgprobe" }
 zeroize.workspace = true
