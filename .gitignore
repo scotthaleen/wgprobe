@@ -1,0 +1,14 @@
+/target/
+/dist/
+/.venv/
+/uv.lock
+/nordprobe-exports/
+__pycache__/
+*.py[cod]
+*.conf
+*.conf.*
+.env
+.KEY
+/.key*
+/demo.gif
+/demo.tape

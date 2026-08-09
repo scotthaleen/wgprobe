@@ -1,0 +1,26 @@
+[package]
+name = "nordprobe"
+version = "0.1.0"
+edition.workspace = true
+description = "Browse and verify Nord WireGuard endpoints in a terminal UI"
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+base64.workspace = true
+clap.workspace = true
+crossterm = "0.29.0"
+ctrlc = "3.4.7"
+dirs = "6.0.0"
+ratatui = "0.29.0"
+reqwest = { version = "0.12.23", default-features = false, features = ["blocking", "gzip", "json", "rustls-tls"] }
+rpassword = "7.5.4"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+unicode-width = "=0.2.0"
+wgprobe = { version = "0.1.0", path = "../wgprobe" }
+zeroize.workspace = true
+
+[dev-dependencies]
+tempfile = "3.20.0"

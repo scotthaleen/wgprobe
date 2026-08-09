@@ -1,0 +1,17 @@
+[workspace]
+members = ["crates/nordprobe", "crates/wgprobe", "crates/wgprobe-python"]
+default-members = ["crates/nordprobe", "crates/wgprobe"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/scotthaleen/wgprobe"
+
+[workspace.dependencies]
+base64 = "0.22.1"
+clap = { version = "4.5.45", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.14"
+zeroize = "1.8.1"

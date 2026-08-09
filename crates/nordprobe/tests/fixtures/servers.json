@@ -1,0 +1,22 @@
+[
+  {
+    "name": "United States #2", "hostname": "us2.nordvpn.com", "station": "192.0.2.20", "load": 5, "status": "online",
+    "locations": [{"country": {"name": "United States", "city": {"name": "Atlanta"}}}],
+    "technologies": [{"identifier": "wireguard_udp", "metadata": [{"name": "public_key", "value": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="}], "pivot": {"status": "online"}}]
+  },
+  {
+    "name": "United States #1", "hostname": "us1.nordvpn.com", "station": "192.0.2.10", "load": 12, "status": "online",
+    "locations": [{"country": {"name": "United States", "city": {"name": "Denver"}}}],
+    "technologies": [{"identifier": "wireguard_udp", "metadata": [{"name": "public_key", "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}], "pivot": {"status": "online"}}]
+  },
+  {
+    "name": "duplicate", "hostname": "duplicate.nordvpn.com", "station": "192.0.2.10", "load": 99, "status": "online",
+    "locations": [{"country": {"name": "United States", "city": {"name": "Denver"}}}],
+    "technologies": [{"identifier": "wireguard_udp", "metadata": [{"name": "public_key", "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}], "pivot": {"status": "online"}}]
+  },
+  {
+    "name": "offline", "hostname": "off.nordvpn.com", "station": "192.0.2.30", "load": 1, "status": "offline",
+    "locations": [{"country": {"name": "United States", "city": {"name": "Chicago"}}}],
+    "technologies": [{"identifier": "wireguard_udp", "metadata": [{"name": "public_key", "value": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC="}], "pivot": {"status": "online"}}]
+  }
+]

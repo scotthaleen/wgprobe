@@ -1,0 +1,57 @@
+[build-system]
+requires = ["maturin>=1.14,<2"]
+build-backend = "maturin"
+
+[project]
+name = "wgprobe"
+dynamic = ["version"]
+description = "Optional Python bindings for the generic wgprobe library"
+readme = "python/README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Rust",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Repository = "https://github.com/scotthaleen/wgprobe"
+Issues = "https://github.com/scotthaleen/wgprobe/issues"
+
+[dependency-groups]
+dev = [
+  "maturin>=1.14,<2",
+  "mypy>=1.19,<2",
+  "pytest>=9,<10",
+  "ruff>=0.14,<1",
+]
+
+[tool.uv]
+package = false
+
+[tool.maturin]
+bindings = "pyo3"
+features = ["extension-module"]
+manifest-path = "crates/wgprobe-python/Cargo.toml"
+module-name = "wgprobe._wgprobe"
+python-source = "python"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["python/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+files = ["python/wgprobe", "python/tests", "examples"]
+mypy_path = "python"
+python_version = "3.10"
+strict = true
