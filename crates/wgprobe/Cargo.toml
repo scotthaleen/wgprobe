@@ -1,6 +1,6 @@
 [package]
 name = "wgprobe"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Probe a WireGuard endpoint without creating a tunnel interface"
 license = "MIT"
