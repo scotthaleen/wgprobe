@@ -148,6 +148,9 @@ jobs:
             runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: Homebrew/actions/setup-homebrew@1f8e202ffddf94def7f42f6fa3a482e821489f9c # 2026.07.10.1
       - run: brew style Formula/wgprobe.rb Formula/nordprobe.rb
       - name: Register checkout as a tap
