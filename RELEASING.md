@@ -11,6 +11,11 @@ from `master`. Keep the default `GITHUB_TOKEN` permission read-only. The
 workflows grant write access only to the jobs that open the pull request, create
 the tag, attest artifacts, or publish the release.
 
+Under **Settings > Actions > General**, enable **Allow GitHub Actions to create
+and approve pull requests**. The preparation workflow needs this repository
+setting to create the version-bump pull request. It does not approve the pull
+request.
+
 ## Publish a patch release
 
 1. Merge the changes that the release must contain into `master`.
@@ -55,9 +60,12 @@ contains the formula itself.
 
 ## Recover a failed release
 
-- If release preparation reports that the branch already exists, inspect the
-  existing `release/vMAJOR.MINOR.PATCH` branch and pull request. Delete the branch
-  only when it is stale and no release work depends on it.
+- Rerun release preparation after a transient PR-creation failure. The workflow
+  reuses an existing release branch only when its file tree exactly matches the
+  generated version bump.
+- If release preparation reports unexpected branch content, inspect the existing
+  `release/vMAJOR.MINOR.PATCH` branch. Delete it only when it is stale and no
+  release work depends on it.
 - If artifact construction fails before a release exists, rerun the Release
   workflow with the existing tag.
 - If a draft release exists, delete the draft before rerunning the workflow.
