@@ -1,9 +1,8 @@
 class Wgprobe < Formula
   desc "Probe a WireGuard endpoint without creating a tunnel interface"
   homepage "https://github.com/scotthaleen/wgprobe"
-  url "https://github.com/scotthaleen/wgprobe/archive/113fedcc3fdfca16718cf60d0f0d4890100a18ae.tar.gz"
-  version "0.1.0"
-  sha256 "4b7999c21363a71dd96a5a4c54a345b18dde37648cfbecc7bf816af9f571252b"
+  url "https://github.com/scotthaleen/wgprobe/archive/refs/tags/v0.1.1.tar.gz"
+  sha256 "e8fe797b8fb72fe17f3d7a2857e1fdec57cb1aeb24bffebc9c6018a43050337c"
   license "MIT"
   head "https://github.com/scotthaleen/wgprobe.git", branch: "master"
 
@@ -14,7 +13,7 @@ class Wgprobe < Formula
   end
 
   test do
-    assert_match "wgprobe 0.1.0", shell_output("#{bin}/wgprobe --version")
+    assert_match "wgprobe 0.1.1", shell_output("#{bin}/wgprobe --version")
     assert_match "Usage: wgprobe", shell_output("#{bin}/wgprobe --help")
   end
 end
