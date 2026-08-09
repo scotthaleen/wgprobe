@@ -1,28 +1,65 @@
 # Releasing
 
-Releases are built only from an existing `vMAJOR.MINOR.PATCH` tag. The tag must
-point to a commit that contains the release workflow and matching versions in all
-three Cargo packages. Before the first release, enable release immutability under
-the repository's **Settings > Releases** section.
+Patch releases use a version-bump pull request. Merging that pull request creates
+the version tag and starts the artifact build. The release workflow rejects any
+version change that is not exactly one patch above the version in the parent
+commit.
 
-1. Update the package versions and user-facing release documentation in a pull
-   request.
-2. Run the full CI suite and merge the pull request.
-3. Tag the merge commit and push the tag:
+Before the first release, enable release immutability under **Settings >
+Releases**. The `release-preparation` environment must allow deployments only
+from `master`. Keep the default `GITHUB_TOKEN` permission read-only. The
+workflows grant write access only to the jobs that open the pull request, create
+the tag, attest artifacts, or publish the release.
 
-   ```sh
-   git tag v0.2.0
-   git push origin v0.2.0
-   ```
+## Publish a patch release
 
-4. Confirm that the Release workflow publishes eight native archives, four ABI3
-   wheels, `install.sh`, `SHA256SUMS`, and GitHub artifact attestations.
-5. Verify one Linux installer path and one Homebrew installation before
-   announcing the release.
-6. Update both formulas in a follow-up pull request. Set their version, source
-   URL, and SHA-256 checksum to the new release source archive, then run `brew
-   style`, `brew audit --strict`, `brew install --build-from-source`, and `brew
-   test` for each formula.
+1. Merge the changes that the release must contain into `master`.
+2. Open **Actions > Prepare patch release > Run workflow** and run the workflow
+   from `master`.
+3. Open the generated `Release vMAJOR.MINOR.PATCH` pull request.
+4. Approve its workflow runs when GitHub requests approval. GitHub requires this
+   approval for pull requests created with `GITHUB_TOKEN`.
+5. Confirm that the pull request changes all three Cargo package versions, the
+   two internal `wgprobe` dependency requirements, and `Cargo.lock`.
+6. Wait for the full CI suite, then squash-merge the pull request.
+7. Confirm that the Release workflow creates the matching tag and publishes:
 
-Published releases are immutable. A failed draft can be deleted and rebuilt, but
-an existing published release must not be overwritten.
+   - eight native archives;
+   - four Python 3.10+ ABI3 wheels;
+   - `install.sh`;
+   - `SHA256SUMS`; and
+   - GitHub artifact attestations.
+
+8. Test one Linux installer path and one Homebrew installation before announcing
+   the release.
+
+The version can also be prepared locally with:
+
+```sh
+./scripts/bump-version.sh patch
+```
+
+The script updates the package manifests and lockfile. It does not create a
+commit, tag, or release.
+
+## Update Homebrew formulas
+
+Update both formulas in a follow-up pull request. The formula checksum cannot be
+part of the release commit because the checksum covers a source archive that
+contains the formula itself.
+
+1. Set each formula's version and URL to the new tagged source archive.
+2. Set each formula's SHA-256 checksum to that archive's checksum.
+3. Run `brew style` and `brew audit --strict` for both formulas.
+4. Run source installation and `brew test` for both formulas on macOS and Linux.
+
+## Recover a failed release
+
+- If release preparation reports that the branch already exists, inspect the
+  existing `release/vMAJOR.MINOR.PATCH` branch and pull request. Delete the branch
+  only when it is stale and no release work depends on it.
+- If artifact construction fails before a release exists, rerun the Release
+  workflow with the existing tag.
+- If a draft release exists, delete the draft before rerunning the workflow.
+- Never move or overwrite a tag for a published immutable release. Prepare the
+  next patch release instead.
