@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-quality:
+    name: Rust quality
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust components
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable --component clippy,rustfmt
+          rustup default stable
+      - run: cargo fmt --all --check
+      - run: cargo test --workspace --locked
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  rust-platforms:
+    name: Rust build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            musl: true
+          - name: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            musl: true
+          - name: macos-aarch64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            musl: false
+          - name: macos-x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            musl: false
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable --target "${{ matrix.target }}"
+          rustup default stable
+      - name: Install musl tools
+        if: matrix.musl
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build native tools
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+        run: >-
+          cargo build --locked --release -p wgprobe -p nordprobe
+          --target "${{ matrix.target }}"
+
+  python-quality:
+    name: Python quality
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: 0.12.3
+          enable-cache: true
+      - run: uv run --isolated --with 'mypy>=1.19,<2' mypy
+      - run: uv run --isolated --with 'ruff>=0.14,<1' ruff check .
+
+  python-wheel:
+    name: Python wheel (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+          - name: macos-aarch64
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: 0.12.3
+          enable-cache: true
+      - run: uv python install 3.10
+      - name: Build wheel
+        run: >-
+          uv run --python 3.10 --isolated --with maturin==1.14.1
+          maturin build --release --locked --out dist
+      - name: Test installed wheel
+        run: |
+          wheel=$(ls dist/*.whl)
+          uv run --python 3.10 --isolated --with "$wheel" --with 'pytest>=9,<10' pytest python/tests
+
+  installer:
+    name: Installer syntax
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: sh -n install.sh
+      - run: ./install.sh --help
+      - name: Reject malformed versions before download
+        run: |
+          if ./install.sh --version 1..2 2>installer-error.log; then
+            echo "malformed version was accepted" >&2
+            exit 1
+          fi
+          grep -F "invalid release version" installer-error.log
+
+  homebrew:
+    name: Homebrew formulas (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-aarch64
+            runner: macos-15
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Homebrew/actions/setup-homebrew@1f8e202ffddf94def7f42f6fa3a482e821489f9c # 2026.07.10.1
+      - run: brew style Formula/wgprobe.rb Formula/nordprobe.rb
+      - name: Register checkout as a tap
+        run: brew tap scotthaleen/wgprobe "file://$GITHUB_WORKSPACE"
+      - run: >-
+          brew audit --strict
+          scotthaleen/wgprobe/wgprobe
+          scotthaleen/wgprobe/nordprobe
+      - run: brew install --build-from-source scotthaleen/wgprobe/wgprobe
+      - run: brew install --build-from-source scotthaleen/wgprobe/nordprobe
+      - run: brew test scotthaleen/wgprobe/wgprobe
+      - run: brew test scotthaleen/wgprobe/nordprobe

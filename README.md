@@ -1,5 +1,7 @@
 # wgprobe
 
+[![CI](https://github.com/scotthaleen/wgprobe/actions/workflows/ci.yml/badge.svg)](https://github.com/scotthaleen/wgprobe/actions/workflows/ci.yml)
+
 `wgprobe` is a provider-neutral userspace WireGuard probe. It answers one focused
 question: can this identity authenticate with this endpoint? It verifies the
 connection without creating a TUN interface, changing system routes, or
@@ -54,7 +56,37 @@ storage. Reports exclude private and preshared keys. Clipboard history, terminal
 buffers after an explicit reveal, and exported configurations remain outside
 that boundary and require separate protection.
 
-## Quick Start
+## Install
+
+### Homebrew
+
+The formulas build from source on macOS or Linux. This repository uses an
+explicit tap URL because its name does not have Homebrew's `homebrew-` prefix:
+
+```sh
+brew tap scotthaleen/wgprobe https://github.com/scotthaleen/wgprobe
+brew install scotthaleen/wgprobe/wgprobe
+brew install scotthaleen/wgprobe/nordprobe
+```
+
+### Linux Release Binaries
+
+The installer supports x86-64 and ARM64 Linux, verifies each archive against the
+release checksums, and installs both tools under `~/.local/bin` by default:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/scotthaleen/wgprobe/releases/latest/download/install.sh | sh
+```
+
+Pass options through `sh -s --`, for example `--bin wgprobe`, `--version 0.1.0`,
+or `--to /usr/local/bin`. Review [`install.sh`](install.sh) before piping it to a
+shell when required by your security policy.
+
+Python 3.10+ ABI3 wheels are attached to each
+[GitHub release](https://github.com/scotthaleen/wgprobe/releases).
+
+## Build from Source
 
 Build both native tools from the workspace root:
 
