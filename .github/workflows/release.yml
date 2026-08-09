@@ -1,0 +1,221 @@
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v0.1.0
+        required: true
+        default: v0.1.0
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate tag and package versions
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "invalid release tag: $RELEASE_TAG" >&2
+            exit 1
+          }
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "$RELEASE_TAG^{commit}")" || {
+            echo "$RELEASE_TAG does not identify the checked-out commit" >&2
+            exit 1
+          }
+          version=${RELEASE_TAG#v}
+          cargo metadata --no-deps --format-version 1 |
+            jq -e --arg version "$version" 'all(.packages[]; .version == $version)'
+      - name: Install Rust components
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable --component clippy,rustfmt
+          rustup default stable
+      - run: cargo fmt --all --check
+      - run: cargo test --workspace --locked
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  native:
+    name: Native binaries (${{ matrix.platform }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+          - platform: macos-aarch64
+            runner: macos-15
+            target: aarch64-apple-darwin
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - name: Install Rust target
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable --target "${{ matrix.target }}"
+          rustup default stable
+      - name: Install musl tools
+        if: startsWith(matrix.platform, 'linux-')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build and package binaries
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+        run: |
+          version=${RELEASE_TAG#v}
+          cargo build --locked --release -p wgprobe -p nordprobe --target "${{ matrix.target }}"
+          mkdir -p dist
+          for binary in wgprobe nordprobe; do
+            "target/${{ matrix.target }}/release/$binary" --version
+            strip "target/${{ matrix.target }}/release/$binary"
+            package="$binary-$version-${{ matrix.platform }}"
+            mkdir -p "dist/$package"
+            cp "target/${{ matrix.target }}/release/$binary" "dist/$package/"
+            cp LICENSE "dist/$package/"
+            cp "crates/$binary/README.md" "dist/$package/README.md"
+            tar -C dist -czf "dist/$package.tar.gz" "$package"
+            verification="$RUNNER_TEMP/verify-$binary"
+            mkdir -p "$verification"
+            tar -xzf "dist/$package.tar.gz" -C "$verification"
+            "$verification/$package/$binary" --version
+            if [[ "${{ matrix.platform }}" == linux-* ]]; then
+              file "$verification/$package/$binary" | grep -E 'statically linked|static-pie linked'
+            fi
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-native-${{ matrix.platform }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  wheels:
+    name: Python wheel (${{ matrix.platform }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            manylinux: "2_28"
+          - platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            manylinux: "2_28"
+          - platform: macos-aarch64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            manylinux: "off"
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            manylinux: "off"
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          command: build
+          maturin-version: v1.14.1
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --locked --compatibility pypi --out dist
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: 0.12.3
+          enable-cache: false
+      - name: Test installed wheel
+        run: |
+          uv python install 3.10 3.14
+          wheel=$(ls dist/*.whl)
+          case "$(basename "$wheel")" in
+            *-cp310-abi3-*) ;;
+            *) echo "wheel does not use the cp310 ABI3 tag: $wheel" >&2; exit 1 ;;
+          esac
+          for python in 3.10 3.14; do
+            uv run --python "$python" --isolated --with "$wheel" --with 'pytest>=9,<10' pytest python/tests
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-wheel-${{ matrix.platform }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [native, wheels]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create checksums
+        run: |
+          cp install.sh release-assets/install.sh
+          cd release-assets
+          sha256sum * > SHA256SUMS
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: release-assets/*
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release already exists: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --draft \
+            --title "$RELEASE_TAG" \
+            --generate-notes
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
