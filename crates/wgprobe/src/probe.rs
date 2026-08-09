@@ -551,11 +551,11 @@ fn resolve_endpoint(endpoint: String, timeout: Duration) -> Result<Option<Socket
     thread::Builder::new()
         .name("wgprobe-resolver".into())
         .spawn(move || {
-            let _slot = slot;
             let result = endpoint
                 .to_socket_addrs()
                 .map(|mut addresses| addresses.next())
                 .map_err(|error| error.to_string());
+            drop(slot);
             let _ = sender.send(result);
         })
         .map_err(|error| format!("could not start endpoint resolver: {error}"))?;
