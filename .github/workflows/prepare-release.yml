@@ -1,0 +1,62 @@
+name: Prepare patch release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepare-patch-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Open version bump PR
+    runs-on: ubuntu-24.04
+    environment: release-preparation
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          persist-credentials: false
+      - name: Install Rust components
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable --component clippy,rustfmt
+          rustup default stable
+      - name: Bump patch version
+        id: version
+        run: |
+          version=$(./scripts/bump-version.sh patch)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Run release checks
+        run: |
+          cargo fmt --all --check
+          cargo test --workspace --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Open release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          branch="release/v$VERSION"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "release branch already exists: $branch" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add Cargo.lock crates/*/Cargo.toml
+          git commit -m "Release v$VERSION"
+          gh auth setup-git
+          git push origin "$branch"
+          gh pr create \
+            --base master \
+            --head "$branch" \
+            --title "Release v$VERSION" \
+            --body "Bump all package versions to \`$VERSION\`. Merging this PR creates \`v$VERSION\` and publishes the release artifacts."
