@@ -2,7 +2,6 @@ class Wgprobe < Formula
   desc "Probe a WireGuard endpoint without creating a tunnel interface"
   homepage "https://github.com/scotthaleen/wgprobe"
   url "https://github.com/scotthaleen/wgprobe/archive/refs/tags/v0.1.1.tar.gz"
-  version "0.1.1"
   sha256 "e8fe797b8fb72fe17f3d7a2857e1fdec57cb1aeb24bffebc9c6018a43050337c"
   license "MIT"
   head "https://github.com/scotthaleen/wgprobe.git", branch: "master"
