@@ -162,10 +162,11 @@ jobs:
             runner: macos-15-intel
             target: x86_64-apple-darwin
             napi_cross: false
-          - platform: windows-x86_64
-            runner: windows-2025
-            target: x86_64-pc-windows-msvc
-            napi_cross: false
+          # Disabled until npm permits the wgprobe-win32-x64-msvc package name.
+          # - platform: windows-x86_64
+          #   runner: windows-2025
+          #   target: x86_64-pc-windows-msvc
+          #   napi_cross: false
     runs-on: ${{ matrix.runner }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "11.0"
@@ -211,7 +212,7 @@ jobs:
       - name: Test addon
         run: npm test
         working-directory: node
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: node-addon-${{ matrix.platform }}
           path: node/*.node

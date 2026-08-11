@@ -217,7 +217,7 @@ jobs:
               file "$verification/$package/$binary" | grep -E 'statically linked|static-pie linked'
             fi
           done
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-native-${{ matrix.platform }}
           path: dist/*.tar.gz
@@ -281,7 +281,7 @@ jobs:
           for python in 3.10 3.14; do
             uv run --python "$python" --isolated --with "$wheel" --with 'pytest>=9,<10' pytest python/tests
           done
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-wheel-${{ matrix.platform }}
           path: dist/*.whl
@@ -310,10 +310,11 @@ jobs:
             runner: macos-15-intel
             target: x86_64-apple-darwin
             napi_cross: false
-          - platform: windows-x86_64
-            runner: windows-2025
-            target: x86_64-pc-windows-msvc
-            napi_cross: false
+          # Disabled until npm permits the wgprobe-win32-x64-msvc package name.
+          # - platform: windows-x86_64
+          #   runner: windows-2025
+          #   target: x86_64-pc-windows-msvc
+          #   napi_cross: false
     runs-on: ${{ matrix.runner }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "11.0"
@@ -360,7 +361,7 @@ jobs:
       - name: Test addon
         run: npm test
         working-directory: node
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-node-${{ matrix.platform }}
           path: node/*.node
@@ -422,12 +423,12 @@ jobs:
       - name: Verify package artifacts
         working-directory: node
         run: |
+          # The Windows addon is disabled until npm permits its package name.
           for artifact in \
             wgprobe.darwin-arm64.node \
             wgprobe.darwin-x64.node \
             wgprobe.linux-arm64-gnu.node \
-            wgprobe.linux-x64-gnu.node \
-            wgprobe.win32-x64-msvc.node; do
+            wgprobe.linux-x64-gnu.node; do
             test -f "$artifact"
           done
       - name: Check existing publication
@@ -441,7 +442,6 @@ jobs:
             wgprobe-darwin-x64
             wgprobe-linux-arm64-gnu
             wgprobe-linux-x64-gnu
-            wgprobe-win32-x64-msvc
           )
           if npm view "wgprobe@$version" version >/dev/null 2>&1; then
             for package in "${packages[@]}"; do
@@ -463,13 +463,13 @@ jobs:
         working-directory: node
         run: |
           version=$(node -p "require('./package.json').version")
+          # The Windows package is disabled until npm permits its package name.
           for package in \
             wgprobe \
             wgprobe-darwin-arm64 \
             wgprobe-darwin-x64 \
             wgprobe-linux-arm64-gnu \
-            wgprobe-linux-x64-gnu \
-            wgprobe-win32-x64-msvc; do
+            wgprobe-linux-x64-gnu; do
             test "$(npm view "$package@$version" version)" = "$version"
           done
 
