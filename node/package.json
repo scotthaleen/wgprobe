@@ -1,0 +1,50 @@
+{
+  "name": "wgprobe",
+  "version": "0.1.2",
+  "description": "Typed Node.js bindings for probing WireGuard endpoints",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scotthaleen/wgprobe.git",
+    "directory": "node"
+  },
+  "bugs": "https://github.com/scotthaleen/wgprobe/issues",
+  "homepage": "https://github.com/scotthaleen/wgprobe#readme",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "napi build --manifest-path ../Cargo.toml --package wgprobe-node --package-json-path package.json --output-dir . --platform",
+    "build:release": "npm run build -- --release -- --locked",
+    "prepublishOnly": "napi prepublish -t npm --no-gh-release",
+    "test": "node --test test/*.test.cjs",
+    "typecheck": "tsc --noEmit --strict --module node16 --moduleResolution node16 --target es2022 test/types.ts"
+  },
+  "napi": {
+    "binaryName": "wgprobe",
+    "dtsHeaderFile": "dts-header.d.ts",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc"
+    ]
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "3.8.5",
+    "typescript": "5.9.2"
+  }
+}

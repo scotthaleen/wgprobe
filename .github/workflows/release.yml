@@ -3,7 +3,6 @@ name: Release
 on:
   push:
     branches: [master]
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
     paths:
       - crates/nordprobe/Cargo.toml
       - crates/wgprobe/Cargo.toml
@@ -46,7 +45,26 @@ jobs:
           metadata=$(cargo metadata --no-deps --format-version 1)
           version=$(jq -r '.packages[] | select(.name == "wgprobe") | .version' <<<"$metadata")
           jq -e --arg version "$version" 'all(.packages[]; .version == $version)' <<<"$metadata"
-          for manifest in crates/nordprobe/Cargo.toml crates/wgprobe-python/Cargo.toml; do
+          test "$(jq -r .version node/package.json)" = "$version" || {
+            echo "node/package.json does not use version $version" >&2
+            exit 1
+          }
+          jq -e --arg version "$version" \
+            '.version == $version and .packages[""].version == $version' \
+            node/package-lock.json >/dev/null || {
+              echo "node/package-lock.json does not use version $version" >&2
+              exit 1
+            }
+          loader_versions=$(sed -n \
+            's/.*expected \([0-9][0-9.]*\) but got.*/\1/p' node/index.js | sort -u)
+          test "$loader_versions" = "$version" || {
+            echo "node/index.js expects native package version(s): $loader_versions" >&2
+            exit 1
+          }
+          for manifest in \
+            crates/nordprobe/Cargo.toml \
+            crates/wgprobe-node/Cargo.toml \
+            crates/wgprobe-python/Cargo.toml; do
             grep -Fqx "wgprobe = { version = \"$version\", path = \"../wgprobe\" }" "$manifest" || {
               echo "$manifest does not require wgprobe $version" >&2
               exit 1
@@ -58,6 +76,7 @@ jobs:
             for manifest in \
               crates/wgprobe/Cargo.toml \
               crates/nordprobe/Cargo.toml \
+              crates/wgprobe-node/Cargo.toml \
               crates/wgprobe-python/Cargo.toml; do
               candidate=$(git show "$GITHUB_SHA^:$manifest" |
                 sed -n 's/^version = "\([0-9][0-9.]*\)"$/\1/p')
@@ -268,6 +287,85 @@ jobs:
           path: dist/*.whl
           if-no-files-found: error
 
+  node-addon:
+    name: Node addon (${{ matrix.platform }})
+    needs: [validate, tag]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            napi_cross: true
+          - platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            napi_cross: true
+          - platform: macos-aarch64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            napi_cross: false
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            napi_cross: false
+          - platform: windows-x86_64
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            napi_cross: false
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - run: npm ci
+        working-directory: node
+      - name: Build addon
+        shell: bash
+        working-directory: node
+        env:
+          TARGET: ${{ matrix.target }}
+          USE_NAPI_CROSS: ${{ matrix.napi_cross }}
+        run: |
+          args=()
+          if [[ "$USE_NAPI_CROSS" == true ]]; then
+            args+=(--use-napi-cross)
+            export TARGET_CC=clang
+          fi
+          npx napi build \
+            --manifest-path ../Cargo.toml \
+            --package wgprobe-node \
+            --package-json-path package.json \
+            --output-dir . \
+            --platform \
+            --release \
+            --target "$TARGET" \
+            "${args[@]}" \
+            -- --locked
+      - name: Verify glibc floor
+        if: startsWith(matrix.platform, 'linux-')
+        shell: bash
+        working-directory: node
+        run: |
+          highest=$(objdump -T ./*.node | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1)
+          test "$(printf 'GLIBC_2.17\n%s\n' "$highest" | sort -V | tail -1)" = GLIBC_2.17
+      - name: Test addon
+        run: npm test
+        working-directory: node
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-node-${{ matrix.platform }}
+          path: node/*.node
+          if-no-files-found: error
+
   publish-pypi:
     name: Publish Python wheels to PyPI
     needs: [validate, tag, wheels]
@@ -293,9 +391,91 @@ jobs:
           --check-url https://pypi.org/simple/wgprobe/
           pypi-dist/*.whl
 
+  publish-npm:
+    name: Publish Node package to npm
+    needs: [validate, tag, node-addon]
+    runs-on: ubuntu-24.04
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm ci
+        working-directory: node
+      - run: npx napi create-npm-dirs
+        working-directory: node
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-node-*
+          path: node/artifacts
+      - run: npx napi artifacts --output-dir artifacts --npm-dir npm
+        working-directory: node
+      - name: Verify package artifacts
+        working-directory: node
+        run: |
+          for artifact in \
+            wgprobe.darwin-arm64.node \
+            wgprobe.darwin-x64.node \
+            wgprobe.linux-arm64-gnu.node \
+            wgprobe.linux-x64-gnu.node \
+            wgprobe.win32-x64-msvc.node; do
+            test -f "$artifact"
+          done
+      - name: Check existing publication
+        id: npm-release
+        working-directory: node
+        run: |
+          version=$(node -p "require('./package.json').version")
+          packages=(
+            wgprobe
+            wgprobe-darwin-arm64
+            wgprobe-darwin-x64
+            wgprobe-linux-arm64-gnu
+            wgprobe-linux-x64-gnu
+            wgprobe-win32-x64-msvc
+          )
+          if npm view "wgprobe@$version" version >/dev/null 2>&1; then
+            for package in "${packages[@]}"; do
+              npm view "$package@$version" version >/dev/null
+            done
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Validate npm packages
+        if: steps.npm-release.outputs.publish == 'true'
+        run: npx napi prepublish -t npm --no-gh-release --dry-run
+        working-directory: node
+      - name: Publish npm packages
+        if: steps.npm-release.outputs.publish == 'true'
+        run: npm publish --access public
+        working-directory: node
+      - name: Verify npm packages
+        working-directory: node
+        run: |
+          version=$(node -p "require('./package.json').version")
+          for package in \
+            wgprobe \
+            wgprobe-darwin-arm64 \
+            wgprobe-darwin-x64 \
+            wgprobe-linux-arm64-gnu \
+            wgprobe-linux-x64-gnu \
+            wgprobe-win32-x64-msvc; do
+            test "$(npm view "$package@$version" version)" = "$version"
+          done
+
   publish:
     name: Publish GitHub release
-    needs: [validate, tag, native, wheels]
+    needs: [validate, tag, native, wheels, node-addon, publish-pypi, publish-npm]
     runs-on: ubuntu-24.04
     env:
       RELEASE_TAG: ${{ needs.validate.outputs.tag }}

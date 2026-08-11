@@ -122,6 +122,101 @@ jobs:
           wheel=$(ls dist/*.whl)
           uv run --python 3.10 --isolated --with "$wheel" --with 'pytest>=9,<10' pytest python/tests
 
+  node-quality:
+    name: Node quality
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - run: npm ci
+        working-directory: node
+      - run: npm run typecheck
+        working-directory: node
+      - run: npm pack --dry-run --ignore-scripts
+        working-directory: node
+
+  node-addon:
+    name: Node addon (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            napi_cross: true
+          - platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            napi_cross: true
+          - platform: macos-aarch64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            napi_cross: false
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            napi_cross: false
+          - platform: windows-x86_64
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            napi_cross: false
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - run: npm ci
+        working-directory: node
+      - name: Build addon
+        shell: bash
+        working-directory: node
+        env:
+          TARGET: ${{ matrix.target }}
+          USE_NAPI_CROSS: ${{ matrix.napi_cross }}
+        run: |
+          args=()
+          if [[ "$USE_NAPI_CROSS" == true ]]; then
+            args+=(--use-napi-cross)
+            export TARGET_CC=clang
+          fi
+          npx napi build \
+            --manifest-path ../Cargo.toml \
+            --package wgprobe-node \
+            --package-json-path package.json \
+            --output-dir . \
+            --platform \
+            --release \
+            --target "$TARGET" \
+            "${args[@]}" \
+            -- --locked
+      - name: Verify glibc floor
+        if: startsWith(matrix.platform, 'linux-')
+        shell: bash
+        working-directory: node
+        run: |
+          highest=$(objdump -T ./*.node | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1)
+          test "$(printf 'GLIBC_2.17\n%s\n' "$highest" | sort -V | tail -1)" = GLIBC_2.17
+      - name: Test addon
+        run: npm test
+        working-directory: node
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: node-addon-${{ matrix.platform }}
+          path: node/*.node
+          if-no-files-found: error
+
   installer:
     name: Installer syntax
     runs-on: ubuntu-24.04

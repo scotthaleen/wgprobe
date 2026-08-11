@@ -6,7 +6,7 @@ version change that is not exactly one patch above the version in the parent
 commit.
 
 Before the first release, enable release immutability under **Settings >
-Releases**. The `release-preparation` and `pypi` environments must allow
+Releases**. The `release-preparation`, `pypi`, and `npm` environments must allow
 deployments only from `master`. Keep the default `GITHUB_TOKEN` permission
 read-only. The workflows grant write access only to the jobs that open the pull
 request, create the tag, attest artifacts, or publish the release.
@@ -28,6 +28,30 @@ publisher:
 
 The PyPI job uses OpenID Connect. Do not add a PyPI API token to GitHub.
 
+The npm release consists of `wgprobe` and these native optional packages:
+
+- `wgprobe-darwin-arm64`
+- `wgprobe-darwin-x64`
+- `wgprobe-linux-arm64-gnu`
+- `wgprobe-linux-x64-gnu`
+- `wgprobe-win32-x64-msvc`
+
+After bootstrapping the first version, configure each package under **npm >
+Package settings > Trusted Publisher** with these values:
+
+| Field | Value |
+| --- | --- |
+| Organization or user | `scotthaleen` |
+| Repository | `wgprobe` |
+| Workflow filename | `release.yml` |
+| Environment | `npm` |
+| Allowed action | `npm publish` |
+
+The npm job uses OpenID Connect and automatic provenance. Do not add an npm
+token to GitHub. The first release must be published with the same tested
+artifacts through an interactive npm login because npm has no pending-publisher
+configuration for packages that do not exist.
+
 ## Publish a patch release
 
 1. Merge the changes that the release must contain into `master`.
@@ -36,20 +60,24 @@ The PyPI job uses OpenID Connect. Do not add a PyPI API token to GitHub.
 3. Open the generated `Release vMAJOR.MINOR.PATCH` pull request.
 4. Approve its workflow runs when GitHub requests approval. GitHub requires this
    approval for pull requests created with `GITHUB_TOKEN`.
-5. Confirm that the pull request changes all three Cargo package versions, the
-   two internal `wgprobe` dependency requirements, and `Cargo.lock`.
+5. Confirm that the pull request changes all four Cargo package versions, the
+   three internal `wgprobe` dependency requirements, both npm package metadata
+   files, and `Cargo.lock`.
 6. Wait for the full CI suite, then squash-merge the pull request.
 7. Confirm that the Release workflow creates the matching tag and publishes:
 
    - eight native archives;
    - five Python 3.10+ ABI3 wheels;
+   - five Node-API addons;
    - `install.sh`;
    - `SHA256SUMS`; and
    - GitHub artifact attestations.
 
 8. Confirm that PyPI contains the five wheels and that an isolated
    `wgprobe==MAJOR.MINOR.PATCH` installation succeeds.
-9. Test one Linux installer path and one Homebrew installation before announcing
+9. Confirm that npm contains the root package and all five native packages, then
+   run a clean `npm install wgprobe@MAJOR.MINOR.PATCH` smoke test.
+10. Test one Linux installer path and one Homebrew installation before announcing
    the release.
 
 The version can also be prepared locally with:
@@ -58,8 +86,8 @@ The version can also be prepared locally with:
 ./scripts/bump-version.sh patch
 ```
 
-The script updates the package manifests and lockfile. It does not create a
-commit, tag, or release.
+The script updates the Cargo and npm package manifests and lockfiles. It does not
+create a commit, tag, or release.
 
 ## Update Homebrew formulas
 
@@ -86,5 +114,8 @@ contains the formula itself.
 - If PyPI publication fails, rerun the failed job after correcting the trusted
   publisher. The publish command skips an existing file only when it matches the
   wheel that the workflow produced.
+- If npm publication fails, inspect the root and all five native package versions
+  before retrying. npm publication is not transactional. Reuse the same artifacts
+  and never replace an existing package version with different bytes.
 - Never move or overwrite a tag for a published immutable release. Prepare the
   next patch release instead.

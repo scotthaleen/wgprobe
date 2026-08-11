@@ -7,18 +7,19 @@ question: can this identity authenticate with this endpoint? It verifies the
 connection without creating a TUN interface, changing system routes, or
 requiring administrator access.
 
-## Three Ways to Use It
+## Four Ways to Use It
 
 | Goal | Start here | What it provides |
 | --- | --- | --- |
 | Verify one WireGuard peer directly | [`wgprobe` CLI and Rust library](crates/wgprobe/README.md) | One short-lived handshake with optional IPv4 ping and DNS checks against a configuration or explicit endpoint |
 | Add WireGuard verification to a script | [`wgprobe` Python package](python/README.md) | Typed synchronous Python bindings to the same provider-neutral probe engine |
+| Add WireGuard verification to a Node application | [`wgprobe` npm package](node/README.md) | Typed asynchronous Node.js bindings with native packages for Linux, macOS, and Windows |
 | Find a working NordVPN endpoint | [`nordprobe`](crates/nordprobe/README.md) | A guided provider workflow built on `wgprobe`, with public inventory, safe pacing, confirmation, and export |
 
-The `wgprobe` CLI and Rust library are the foundation. The Python package exposes
-the same core for automation. `nordprobe` builds on it with the inventory and
-workflow needed for NordVPN; the core itself never contacts a provider API or
-handles provider account credentials.
+The `wgprobe` CLI and Rust library are the foundation. The Python and Node.js
+packages expose the same core for automation. `nordprobe` builds on it with the
+inventory and workflow needed for NordVPN; the core itself never contacts a
+provider API or handles provider account credentials.
 
 `nordprobe` is an independent project and is not affiliated with or endorsed by
 Nord Security.
@@ -91,6 +92,15 @@ python -m pip install wgprobe
 
 The same ABI3 wheels are attached to each
 [GitHub release](https://github.com/scotthaleen/wgprobe/releases).
+
+Install the Node.js 22.13+ package from npm:
+
+```sh
+npm install wgprobe
+```
+
+npm selects the matching native package for glibc-based 64-bit Linux, macOS, or
+Windows. Alpine Linux and other musl systems are not supported.
 
 ## Build from Source
 

@@ -28,6 +28,12 @@ jobs:
           rustup set profile minimal
           rustup toolchain install stable --component clippy,rustfmt
           rustup default stable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - run: npm ci
+        working-directory: node
       - name: Bump patch version
         id: version
         run: |
@@ -46,7 +52,13 @@ jobs:
           branch="release/v$VERSION"
           title="Release v$VERSION"
           body="Bump all package versions to \`$VERSION\`. Merging this PR creates \`v$VERSION\` and publishes the release artifacts."
-          git add Cargo.lock crates/*/Cargo.toml
+          git add \
+            Cargo.lock \
+            crates/*/Cargo.toml \
+            node/index.d.ts \
+            node/index.js \
+            node/package.json \
+            node/package-lock.json
 
           if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
             git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch"

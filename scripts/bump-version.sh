@@ -22,8 +22,13 @@ package_version() {
 wgprobe_version=$(package_version crates/wgprobe/Cargo.toml)
 nordprobe_version=$(package_version crates/nordprobe/Cargo.toml)
 python_version=$(package_version crates/wgprobe-python/Cargo.toml)
+node_version=$(package_version crates/wgprobe-node/Cargo.toml)
+npm_version=$(node -p "require('./node/package.json').version")
 
-if [ "$wgprobe_version" != "$nordprobe_version" ] || [ "$wgprobe_version" != "$python_version" ]; then
+if [ "$wgprobe_version" != "$nordprobe_version" ] ||
+  [ "$wgprobe_version" != "$python_version" ] ||
+  [ "$wgprobe_version" != "$node_version" ] ||
+  [ "$wgprobe_version" != "$npm_version" ]; then
   echo "package versions do not match" >&2
   exit 1
 fi
@@ -43,6 +48,7 @@ next_version="$major.$minor.$((patch + 1))"
 for manifest in \
   crates/wgprobe/Cargo.toml \
   crates/nordprobe/Cargo.toml \
+  crates/wgprobe-node/Cargo.toml \
   crates/wgprobe-python/Cargo.toml; do
   sed -i.bak \
     "s/^version = \"$wgprobe_version\"$/version = \"$next_version\"/" \
@@ -52,12 +58,16 @@ done
 
 for manifest in \
   crates/nordprobe/Cargo.toml \
+  crates/wgprobe-node/Cargo.toml \
   crates/wgprobe-python/Cargo.toml; do
   sed -i.bak \
     "s/version = \"$wgprobe_version\", path = \"..\/wgprobe\"/version = \"$next_version\", path = \"..\/wgprobe\"/" \
     "$manifest"
   rm "$manifest.bak"
 done
+
+npm version "$next_version" --no-git-tag-version --prefix node >/dev/null
+npm run build --prefix node >/dev/null
 
 cargo check --workspace --quiet
 cargo check --workspace --locked --quiet
