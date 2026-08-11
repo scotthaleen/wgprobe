@@ -470,7 +470,16 @@ jobs:
             wgprobe-darwin-x64 \
             wgprobe-linux-arm64-gnu \
             wgprobe-linux-x64-gnu; do
-            test "$(npm view "$package@$version" version)" = "$version"
+            for attempt in {1..12}; do
+              if test "$(npm view "$package@$version" version 2>/dev/null)" = "$version"; then
+                break
+              fi
+              if test "$attempt" = 12; then
+                echo "$package@$version did not become visible on npm" >&2
+                exit 1
+              fi
+              sleep 5
+            done
           done
 
   publish:
