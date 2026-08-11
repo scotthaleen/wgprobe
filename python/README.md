@@ -8,7 +8,15 @@ stable ABI for Python 3.10 and newer.
 permissions, keep them out of version control, and never put key values in
 source, logs, command-line arguments, or environment variables.
 
-## Build and Install
+## Install
+
+Install a Python 3.10+ wheel from PyPI:
+
+```sh
+python -m pip install wgprobe
+```
+
+## Build from Source
 
 Requirements are Python 3.10 or newer, a Rust toolchain, and a PEP 517 wheel
 builder. Build from the workspace root without installing Maturin globally:

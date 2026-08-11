@@ -6,15 +6,27 @@ version change that is not exactly one patch above the version in the parent
 commit.
 
 Before the first release, enable release immutability under **Settings >
-Releases**. The `release-preparation` environment must allow deployments only
-from `master`. Keep the default `GITHUB_TOKEN` permission read-only. The
-workflows grant write access only to the jobs that open the pull request, create
-the tag, attest artifacts, or publish the release.
+Releases**. The `release-preparation` and `pypi` environments must allow
+deployments only from `master`. Keep the default `GITHUB_TOKEN` permission
+read-only. The workflows grant write access only to the jobs that open the pull
+request, create the tag, attest artifacts, or publish the release.
 
 Under **Settings > Actions > General**, enable **Allow GitHub Actions to create
 and approve pull requests**. The preparation workflow needs this repository
 setting to create the version-bump pull request. It does not approve the pull
 request.
+
+Configure `wgprobe` under **PyPI > Manage > Publishing** with this trusted
+publisher:
+
+| Field | Value |
+| --- | --- |
+| Owner | `scotthaleen` |
+| Repository | `wgprobe` |
+| Workflow name | `release.yml` |
+| Environment name | `pypi` |
+
+The PyPI job uses OpenID Connect. Do not add a PyPI API token to GitHub.
 
 ## Publish a patch release
 
@@ -30,12 +42,14 @@ request.
 7. Confirm that the Release workflow creates the matching tag and publishes:
 
    - eight native archives;
-   - four Python 3.10+ ABI3 wheels;
+   - five Python 3.10+ ABI3 wheels;
    - `install.sh`;
    - `SHA256SUMS`; and
    - GitHub artifact attestations.
 
-8. Test one Linux installer path and one Homebrew installation before announcing
+8. Confirm that PyPI contains the five wheels and that an isolated
+   `wgprobe==MAJOR.MINOR.PATCH` installation succeeds.
+9. Test one Linux installer path and one Homebrew installation before announcing
    the release.
 
 The version can also be prepared locally with:
@@ -69,5 +83,8 @@ contains the formula itself.
 - If artifact construction fails before a release exists, rerun the Release
   workflow with the existing tag.
 - If a draft release exists, delete the draft before rerunning the workflow.
+- If PyPI publication fails, rerun the failed job after correcting the trusted
+  publisher. The publish command skips an existing file only when it matches the
+  wheel that the workflow produced.
 - Never move or overwrite a tag for a published immutable release. Prepare the
   next patch release instead.

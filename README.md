@@ -83,7 +83,13 @@ Pass options through `sh -s --`, for example `--bin wgprobe`, `--version 0.1.0`,
 or `--to /usr/local/bin`. Review [`install.sh`](install.sh) before piping it to a
 shell when required by your security policy.
 
-Python 3.10+ ABI3 wheels are attached to each
+Install the Python 3.10+ package from PyPI:
+
+```sh
+python -m pip install wgprobe
+```
+
+The same ABI3 wheels are attached to each
 [GitHub release](https://github.com/scotthaleen/wgprobe/releases).
 
 ## Build from Source
