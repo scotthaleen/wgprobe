@@ -5,13 +5,14 @@ const path = require('node:path')
 const test = require('node:test')
 
 const wgprobe = require('../index.js')
+const packageVersion = require('../package.json').version
 
 const FAKE_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
 
 test('exports the typed asynchronous API', () => {
   assert.equal(typeof wgprobe.probeFile, 'function')
   assert.equal(typeof wgprobe.probeKeyFile, 'function')
-  assert.equal(wgprobe.version(), '0.1.2')
+  assert.equal(wgprobe.version(), packageVersion)
 })
 
 test('rejects invalid local configuration with a stable code', async () => {
