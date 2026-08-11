@@ -162,10 +162,11 @@ jobs:
             runner: macos-15-intel
             target: x86_64-apple-darwin
             napi_cross: false
-          - platform: windows-x86_64
-            runner: windows-2025
-            target: x86_64-pc-windows-msvc
-            napi_cross: false
+          # Disabled until npm permits the wgprobe-win32-x64-msvc package name.
+          # - platform: windows-x86_64
+          #   runner: windows-2025
+          #   target: x86_64-pc-windows-msvc
+          #   napi_cross: false
     runs-on: ${{ matrix.runner }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "11.0"

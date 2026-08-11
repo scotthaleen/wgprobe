@@ -2,8 +2,9 @@
 
 The `wgprobe` npm package provides typed asynchronous Node.js bindings to the
 provider-neutral Rust probe engine. It supports Node.js 22.13 and newer on
-glibc-based 64-bit Linux, macOS, and Windows. Alpine Linux and other musl systems
-are not supported.
+glibc-based 64-bit Linux and macOS. Alpine Linux, other musl systems, and Windows
+are not currently supported. Windows support is implemented but temporarily
+disabled while npm reviews the native package name.
 
 Install the package:
 
