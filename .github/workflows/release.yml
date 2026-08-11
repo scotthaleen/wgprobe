@@ -217,7 +217,7 @@ jobs:
               file "$verification/$package/$binary" | grep -E 'statically linked|static-pie linked'
             fi
           done
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-native-${{ matrix.platform }}
           path: dist/*.tar.gz
@@ -281,7 +281,7 @@ jobs:
           for python in 3.10 3.14; do
             uv run --python "$python" --isolated --with "$wheel" --with 'pytest>=9,<10' pytest python/tests
           done
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-wheel-${{ matrix.platform }}
           path: dist/*.whl
@@ -361,7 +361,7 @@ jobs:
       - name: Test addon
         run: npm test
         working-directory: node
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-node-${{ matrix.platform }}
           path: node/*.node
