@@ -1,0 +1,19 @@
+[package]
+name = "wgprobe-node"
+version = "0.1.2"
+edition.workspace = true
+description = "Node.js bindings for wgprobe"
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+napi = { version = "3.12.1", default-features = false, features = ["async", "dyn-symbols", "napi4"] }
+napi-derive = "3.6.3"
+wgprobe = { version = "0.1.2", path = "../wgprobe" }
+zeroize.workspace = true
+
+[build-dependencies]
+napi-build = "2.4.1"

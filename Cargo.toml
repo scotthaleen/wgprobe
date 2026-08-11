@@ -1,5 +1,10 @@
 [workspace]
-members = ["crates/nordprobe", "crates/wgprobe", "crates/wgprobe-python"]
+members = [
+  "crates/nordprobe",
+  "crates/wgprobe",
+  "crates/wgprobe-node",
+  "crates/wgprobe-python",
+]
 default-members = ["crates/nordprobe", "crates/wgprobe"]
 resolver = "3"
 
