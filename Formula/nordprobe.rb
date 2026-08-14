@@ -1,8 +1,8 @@
 class Nordprobe < Formula
   desc "Browse and verify Nord WireGuard endpoints in a terminal UI"
   homepage "https://github.com/scotthaleen/wgprobe"
-  url "https://github.com/scotthaleen/wgprobe/archive/refs/tags/v0.1.3.tar.gz"
-  sha256 "a52525f41614437386ec53eda3826c4c616eb66c1d13cdd8c29fb3e2bfb9b92d"
+  url "https://github.com/scotthaleen/wgprobe/archive/refs/tags/v0.1.4.tar.gz"
+  sha256 "eb09b2d05b35442fde61bdf2839ffa7f0a6cd3574540c70040dea84e8095f732"
   license "MIT"
   head "https://github.com/scotthaleen/wgprobe.git", branch: "master"
 
@@ -13,7 +13,7 @@ class Nordprobe < Formula
   end
 
   test do
-    assert_match "nordprobe 0.1.3", shell_output("#{bin}/nordprobe --version")
+    assert_match "nordprobe 0.1.4", shell_output("#{bin}/nordprobe --version")
     assert_match "Usage: nordprobe", shell_output("#{bin}/nordprobe --help")
   end
 end
