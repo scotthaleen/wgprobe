@@ -34,10 +34,7 @@ The npm release consists of `wgprobe` and these native optional packages:
 - `wgprobe-darwin-x64`
 - `wgprobe-linux-arm64-gnu`
 - `wgprobe-linux-x64-gnu`
-
-The `wgprobe-win32-x64-msvc` package is temporarily disabled because npm blocks
-its initial publication through spam detection. Restore the commented Node
-Windows matrix entries and package checks after npm permits the package name.
+- `wgprobe-win32-x64-msvc`
 
 After bootstrapping the first version, configure each package under **npm >
 Package settings > Trusted Publisher** with these values:
@@ -71,14 +68,14 @@ configuration for packages that do not exist.
 
    - eight native archives;
    - five Python 3.10+ ABI3 wheels;
-   - four Node-API addons;
+   - five Node-API addons;
    - `install.sh`;
    - `SHA256SUMS`; and
    - GitHub artifact attestations.
 
 8. Confirm that PyPI contains the five wheels and that an isolated
    `wgprobe==MAJOR.MINOR.PATCH` installation succeeds.
-9. Confirm that npm contains the root package and all four native packages, then
+9. Confirm that npm contains the root package and all five native packages, then
    run a clean `npm install wgprobe@MAJOR.MINOR.PATCH` smoke test.
 10. Test one Linux installer path and one Homebrew installation before announcing
    the release.
@@ -117,7 +114,7 @@ contains the formula itself.
 - If PyPI publication fails, rerun the failed job after correcting the trusted
   publisher. The publish command skips an existing file only when it matches the
   wheel that the workflow produced.
-- If npm publication fails, inspect the root and all four native package versions
+- If npm publication fails, inspect the root and all five native package versions
   before retrying. npm publication is not transactional. Reuse the same artifacts
   and never replace an existing package version with different bytes.
 - Never move or overwrite a tag for a published immutable release. Prepare the

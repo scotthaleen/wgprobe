@@ -310,11 +310,10 @@ jobs:
             runner: macos-15-intel
             target: x86_64-apple-darwin
             napi_cross: false
-          # Disabled until npm permits the wgprobe-win32-x64-msvc package name.
-          # - platform: windows-x86_64
-          #   runner: windows-2025
-          #   target: x86_64-pc-windows-msvc
-          #   napi_cross: false
+          - platform: windows-x86_64
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            napi_cross: false
     runs-on: ${{ matrix.runner }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "11.0"
@@ -423,12 +422,12 @@ jobs:
       - name: Verify package artifacts
         working-directory: node
         run: |
-          # The Windows addon is disabled until npm permits its package name.
           for artifact in \
             wgprobe.darwin-arm64.node \
             wgprobe.darwin-x64.node \
             wgprobe.linux-arm64-gnu.node \
-            wgprobe.linux-x64-gnu.node; do
+            wgprobe.linux-x64-gnu.node \
+            wgprobe.win32-x64-msvc.node; do
             test -f "$artifact"
           done
       - name: Check existing publication
@@ -442,6 +441,7 @@ jobs:
             wgprobe-darwin-x64
             wgprobe-linux-arm64-gnu
             wgprobe-linux-x64-gnu
+            wgprobe-win32-x64-msvc
           )
           if npm view "wgprobe@$version" version >/dev/null 2>&1; then
             for package in "${packages[@]}"; do
@@ -463,13 +463,13 @@ jobs:
         working-directory: node
         run: |
           version=$(node -p "require('./package.json').version")
-          # The Windows package is disabled until npm permits its package name.
           for package in \
             wgprobe \
             wgprobe-darwin-arm64 \
             wgprobe-darwin-x64 \
             wgprobe-linux-arm64-gnu \
-            wgprobe-linux-x64-gnu; do
+            wgprobe-linux-x64-gnu \
+            wgprobe-win32-x64-msvc; do
             for attempt in {1..12}; do
               if test "$(npm view "$package@$version" version 2>/dev/null)" = "$version"; then
                 break
