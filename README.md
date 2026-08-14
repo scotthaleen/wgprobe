@@ -13,7 +13,7 @@ requiring administrator access.
 | --- | --- | --- |
 | Verify one WireGuard peer directly | [`wgprobe` CLI and Rust library](crates/wgprobe/README.md) | One short-lived handshake with optional IPv4 ping and DNS checks against a configuration or explicit endpoint |
 | Add WireGuard verification to a script | [`wgprobe` Python package](python/README.md) | Typed synchronous Python bindings to the same provider-neutral probe engine |
-| Add WireGuard verification to a Node application | [`wgprobe` npm package](node/README.md) | Typed asynchronous Node.js bindings with native packages for Linux and macOS |
+| Add WireGuard verification to a Node application | [`wgprobe` npm package](node/README.md) | Typed asynchronous Node.js bindings with native packages for Linux, macOS, and Windows |
 | Find a working NordVPN endpoint | [`nordprobe`](crates/nordprobe/README.md) | A guided provider workflow built on `wgprobe`, with public inventory, safe pacing, confirmation, and export |
 
 The `wgprobe` CLI and Rust library are the foundation. The Python and Node.js
@@ -99,8 +99,8 @@ Install the Node.js 22.13+ package from npm:
 npm install wgprobe
 ```
 
-npm selects the matching native package for glibc-based 64-bit Linux or macOS.
-Alpine Linux, other musl systems, and Windows are not currently supported.
+npm selects the matching native package for glibc-based 64-bit Linux, macOS, or
+Windows. Alpine Linux and other musl systems are not currently supported.
 
 ## Build from Source
 
