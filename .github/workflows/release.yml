@@ -443,22 +443,36 @@ jobs:
             wgprobe-linux-x64-gnu
             wgprobe-win32-x64-msvc
           )
-          if npm view "wgprobe@$version" version >/dev/null 2>&1; then
-            for package in "${packages[@]}"; do
-              npm view "$package@$version" version >/dev/null
-            done
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          fi
+          publish=false
+          for package in "${packages[@]}"; do
+            if ! npm view "$package@$version" version >/dev/null 2>&1; then
+              publish=true
+            fi
+          done
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
       - name: Validate npm packages
         if: steps.npm-release.outputs.publish == 'true'
         run: npx napi prepublish -t npm --no-gh-release --dry-run
         working-directory: node
       - name: Publish npm packages
         if: steps.npm-release.outputs.publish == 'true'
-        run: npm publish --access public
         working-directory: node
+        run: |
+          version=$(node -p "require('./package.json').version")
+          for directory in npm/*; do
+            package=$(node -p "require('./$directory/package.json').name")
+            if npm view "$package@$version" version >/dev/null 2>&1; then
+              echo "$package@$version already exists"
+            else
+              npm publish --access public "./$directory"
+            fi
+          done
+          npx napi prepublish -t npm --no-gh-release --skip-optional-publish
+          if npm view "wgprobe@$version" version >/dev/null 2>&1; then
+            echo "wgprobe@$version already exists"
+          else
+            npm publish --access public --ignore-scripts
+          fi
       - name: Verify npm packages
         working-directory: node
         run: |

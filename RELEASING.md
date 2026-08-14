@@ -115,7 +115,8 @@ contains the formula itself.
   publisher. The publish command skips an existing file only when it matches the
   wheel that the workflow produced.
 - If npm publication fails, inspect the root and all five native package versions
-  before retrying. npm publication is not transactional. Reuse the same artifacts
-  and never replace an existing package version with different bytes.
+  before retrying. npm publication is not transactional. The workflow skips exact
+  versions that already exist and publishes missing packages from the same build
+  artifacts. Never replace an existing package version with different bytes.
 - Never move or overwrite a tag for a published immutable release. Prepare the
   next patch release instead.
