@@ -112,8 +112,8 @@ contains the formula itself.
   workflow with the existing tag.
 - If a draft release exists, delete the draft before rerunning the workflow.
 - If PyPI publication fails, rerun the failed job after correcting the trusted
-  publisher. The publish command skips an existing file only when it matches the
-  wheel that the workflow produced.
+  publisher. The workflow skips publication when every wheel filename for the
+  version already exists on PyPI.
 - If npm publication fails, inspect the root and all five native package versions
   before retrying. npm publication is not transactional. The workflow skips exact
   versions that already exist and publishes missing packages from the same build

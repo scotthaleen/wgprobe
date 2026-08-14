@@ -384,7 +384,27 @@ jobs:
         with:
           version: 0.12.3
           enable-cache: false
+      - name: Check existing publication
+        id: pypi-release
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          version=${RELEASE_TAG#v}
+          publish=true
+          if metadata=$(curl --fail --silent --show-error \
+            "https://pypi.org/pypi/wgprobe/$version/json"); then
+            publish=false
+            for wheel in pypi-dist/*.whl; do
+              filename=$(basename "$wheel")
+              if ! jq -e --arg filename "$filename" \
+                '[.urls[].filename] | index($filename) != null' <<<"$metadata" >/dev/null; then
+                publish=true
+              fi
+            done
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
       - name: Publish wheels
+        if: steps.pypi-release.outputs.publish == 'true'
         run: >-
           uv publish
           --trusted-publishing always
