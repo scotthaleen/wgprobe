@@ -1,6 +1,6 @@
 {
   "name": "wgprobe",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Typed Node.js bindings for probing WireGuard endpoints",
   "license": "MIT",
   "repository": {
