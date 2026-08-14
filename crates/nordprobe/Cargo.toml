@@ -1,6 +1,6 @@
 [package]
 name = "nordprobe"
-version = "0.1.4"
+version = "0.1.5"
 edition.workspace = true
 description = "Browse and verify Nord WireGuard endpoints in a terminal UI"
 license.workspace = true
@@ -19,7 +19,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 unicode-width = "=0.2.0"
-wgprobe = { version = "0.1.4", path = "../wgprobe" }
+wgprobe = { version = "0.1.5", path = "../wgprobe" }
 zeroize.workspace = true
 
 [dev-dependencies]
