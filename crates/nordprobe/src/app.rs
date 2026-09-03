@@ -1110,7 +1110,9 @@ mod tests {
         let resolved = resolve_export_directory("custom-exports").unwrap();
         assert_eq!(
             resolved,
-            std::env::current_dir().unwrap().join("custom-exports")
+            std::fs::canonicalize(std::env::current_dir().unwrap())
+                .unwrap()
+                .join("custom-exports")
         );
     }
 
@@ -1138,7 +1140,7 @@ mod tests {
         assert_eq!(
             app.validated_export_directory.as_deref(),
             Some(
-                std::env::current_dir()
+                std::fs::canonicalize(std::env::current_dir().unwrap())
                     .unwrap()
                     .join("custom-exports")
                     .as_path()
