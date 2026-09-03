@@ -75,8 +75,25 @@ cargo build -p nordprobe --release
 .\target\release\nordprobe.exe
 ```
 
-The TUI displays its controls on each screen. `--key-file` bypasses Setup;
+The TUI displays its controls on each screen. Setup includes an optional
+comma- or space-separated **Bypass CIDRs** field. `--key-file` bypasses Setup;
 `--key-file` and `--export-directory` are available only with the TUI and `find`.
+The repeatable `--bypass` option is available with the TUI, `find`, and
+`allowed-ips`.
+
+### AllowedIPs Generator
+
+Generate the IPv4 `AllowedIPs` line without reading a key or contacting Nord:
+
+```sh
+cargo run -p nordprobe --release -- \
+  allowed-ips \
+  --bypass 10.0.0.0/8 \
+  --bypass 192.168.0.0/16
+```
+
+The command normalizes duplicate and overlapping bypasses and prints the
+smallest deterministic list. `--bypass` also accepts comma-separated values.
 
 ### Assisted Find
 
@@ -86,6 +103,7 @@ exports its configuration:
 ```sh
 cargo run -p nordprobe --release -- \
   --key-file path/to/private-key \
+  --bypass 192.168.0.0/16 \
   find --country "United States" --city Denver
 ```
 
@@ -150,8 +168,8 @@ installed tunnel or session remains.
 | `ERROR` | Local validation, socket, I/O, protocol, or worker processing failed. |
 
 Handshake-only mode is the default. Full checks always use the listed inner
-address and route. The TUI and `find --full` use the listed check targets unless
-`find` overrides them:
+address. Without bypasses, they use the default route shown below. The TUI and
+`find --full` use the listed check targets unless `find` overrides them:
 
 ```text
 Address:    10.5.0.2/32
@@ -161,6 +179,8 @@ Ping:       1.1.1.1
 Resolve:    example.com
 ```
 
+With bypasses, full checks use the same generated `AllowedIPs` as the export.
+Nordprobe rejects a ping target or DNS server that falls inside a bypass CIDR.
 A passed ping or DNS check confirms only that packet exchange. It does not
 establish a system VPN or prove general connectivity.
 
@@ -194,8 +214,11 @@ export, and displayed paths preserve whether the configured path was relative or
 absolute. Only confirmed results belonging to the pinned run identity can be
 exported.
 
-Generated configurations set address `10.5.0.2/32`, Nord DNS servers,
-`AllowedIPs = 0.0.0.0/0`, and `PersistentKeepalive = 25`.
+Generated configurations set address `10.5.0.2/32`, Nord DNS servers, and
+`PersistentKeepalive = 25`. `AllowedIPs` defaults to `0.0.0.0/0`. Each
+`--bypass` value, or each CIDR entered in Setup, is subtracted from that route.
+Nordprobe rejects bypasses that contain either configured Nord DNS server or
+exclude all IPv4 addresses.
 
 Nordprobe sanitizes filenames and uses numeric suffixes instead of overwriting
 files. On Unix, newly created directories use mode `0700` and files use `0600`;

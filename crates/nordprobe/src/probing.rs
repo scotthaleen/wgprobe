@@ -7,7 +7,8 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use wgprobe::{
-    PhaseResult, PhaseStatus, ProbeEvent, ProbeEventKind, ProbePlan, ProbeReport, Verdict, probe,
+    Ipv4Cidr, PhaseResult, PhaseStatus, ProbeEvent, ProbeEventKind, ProbePlan, ProbeReport,
+    Verdict, probe,
 };
 
 use crate::inventory::NordTarget;
@@ -25,6 +26,7 @@ pub struct FullCheckPlan {
     pub ping_targets: Vec<Ipv4Addr>,
     pub resolve_names: Vec<String>,
     pub dns_server: Ipv4Addr,
+    pub allowed_ips: Vec<Ipv4Cidr>,
 }
 
 impl Default for FullCheckPlan {
@@ -33,8 +35,31 @@ impl Default for FullCheckPlan {
             ping_targets: vec![Ipv4Addr::new(1, 1, 1, 1)],
             resolve_names: vec!["example.com".into()],
             dns_server: Ipv4Addr::new(103, 86, 96, 100),
+            allowed_ips: vec!["0.0.0.0/0".parse().expect("constant CIDR is valid")],
         }
     }
+}
+
+pub fn validate_check_routes(mode: &CheckMode) -> Result<(), String> {
+    let CheckMode::Full(checks) = mode else {
+        return Ok(());
+    };
+    for target in &checks.ping_targets {
+        if !checks.allowed_ips.iter().any(|cidr| cidr.contains(*target)) {
+            return Err(format!("ping target {target} is inside a bypass CIDR"));
+        }
+    }
+    if !checks
+        .allowed_ips
+        .iter()
+        .any(|cidr| cidr.contains(checks.dns_server))
+    {
+        return Err(format!(
+            "DNS server {} is inside a bypass CIDR",
+            checks.dns_server
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -380,7 +405,7 @@ fn run_attempt(
             config.set_data_config(
                 "10.5.0.2/32".parse().expect("constant CIDR is valid"),
                 vec![IpAddr::V4(checks.dns_server)],
-                vec!["0.0.0.0/0".parse().expect("constant CIDR is valid")],
+                checks.allowed_ips,
             );
             let mut plan = ProbePlan::new(config);
             for target in checks.ping_targets {

@@ -6,6 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use wgprobe::Ipv4Cidr;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::export;
@@ -48,6 +49,7 @@ pub struct App {
     pub pasted_key: Zeroizing<String>,
     pub reveal_pasted_key: bool,
     pub export_directory: Zeroizing<String>,
+    pub bypass_input: String,
     pub inventory: Vec<NordTarget>,
     pub filter: String,
     pub cities: Vec<CitySummary>,
@@ -74,6 +76,7 @@ pub struct App {
     pub exported_attempts: HashMap<u64, PathBuf>,
     identity: Option<Arc<RunIdentity>>,
     validated_export_directory: Option<PathBuf>,
+    allowed_ips: Vec<Ipv4Cidr>,
     inventory_rx: Option<Receiver<Result<InventoryUpdate, String>>>,
     refreshing_inventory: bool,
     worker: Option<WorkerRun>,
@@ -102,6 +105,7 @@ impl App {
             pasted_key: Zeroizing::new(String::new()),
             reveal_pasted_key: false,
             export_directory: Zeroizing::new("./nordprobe-exports".into()),
+            bypass_input: String::new(),
             inventory: Vec::new(),
             filter: String::new(),
             cities: Vec::new(),
@@ -132,6 +136,7 @@ impl App {
             exported_attempts: HashMap::new(),
             identity: None,
             validated_export_directory: None,
+            allowed_ips: vec!["0.0.0.0/0".parse().expect("constant CIDR is valid")],
             inventory_rx: None,
             refreshing_inventory: false,
             worker: None,
@@ -208,6 +213,10 @@ impl App {
                 self.export_directory.push_str(value);
                 self.validated_export_directory = None;
             }
+            3 => {
+                self.bypass_input.clear();
+                self.bypass_input.push_str(value);
+            }
             _ => {}
         }
     }
@@ -237,8 +246,23 @@ impl App {
         Ok(())
     }
 
+    pub fn set_bypasses(&mut self, input: String) -> Result<(), String> {
+        self.allowed_ips = crate::routes::export_allowed_ips(&input)?;
+        self.bypass_input = input;
+        self.sync_full_check_routes();
+        Ok(())
+    }
+
     pub fn identity_public_key(&self) -> Option<&str> {
         self.identity.as_deref().map(RunIdentity::public_key)
+    }
+
+    pub fn allowed_ips_summary(&self) -> String {
+        if self.bypass_input.trim().is_empty() {
+            "AllowedIPs 0.0.0.0/0".into()
+        } else {
+            format!("AllowedIPs {} generated IPv4 CIDRs", self.allowed_ips.len())
+        }
     }
 
     pub fn elapsed(&self) -> Duration {
@@ -394,7 +418,7 @@ impl App {
 
     fn key_setup(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Tab => self.setup_focus = (self.setup_focus + 1) % 3,
+            KeyCode::Tab => self.setup_focus = (self.setup_focus + 1) % 4,
             KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') if self.setup_focus == 0 => {
                 self.toggle_key_source();
             }
@@ -422,6 +446,7 @@ impl App {
                     }
                     self.validated_export_directory = None;
                 }
+                3 => self.bypass_input.push(character),
                 _ => {}
             },
             KeyCode::Backspace => match self.setup_focus {
@@ -436,6 +461,9 @@ impl App {
                 2 => {
                     self.export_directory.pop();
                     self.validated_export_directory = None;
+                }
+                3 => {
+                    self.bypass_input.pop();
                 }
                 _ => {}
             },
@@ -457,6 +485,15 @@ impl App {
     }
 
     fn validate_setup(&mut self) {
+        let allowed_ips = match crate::routes::export_allowed_ips(&self.bypass_input) {
+            Ok(allowed_ips) => allowed_ips,
+            Err(error) => {
+                self.fail(error);
+                return;
+            }
+        };
+        self.allowed_ips = allowed_ips;
+        self.sync_full_check_routes();
         let export_input = self.export_directory.trim().to_owned();
         let export_directory = match self
             .validated_export_directory
@@ -635,9 +672,18 @@ impl App {
 
     fn toggle_mode(&mut self) {
         self.options.mode = match &self.options.mode {
-            CheckMode::HandshakeOnly => CheckMode::Full(FullCheckPlan::default()),
+            CheckMode::HandshakeOnly => CheckMode::Full(FullCheckPlan {
+                allowed_ips: self.allowed_ips.clone(),
+                ..FullCheckPlan::default()
+            }),
             CheckMode::Full(_) => CheckMode::HandshakeOnly,
         };
+    }
+
+    fn sync_full_check_routes(&mut self) {
+        if let CheckMode::Full(checks) = &mut self.options.mode {
+            checks.allowed_ips.clone_from(&self.allowed_ips);
+        }
     }
 
     fn begin_probes(&mut self) {
@@ -655,6 +701,10 @@ impl App {
             || self.options.max_candidates > self.selected_targets.len().min(100)
         {
             self.fail("probe option bounds are inconsistent with available candidates".into());
+            return;
+        }
+        if let Err(error) = probing::validate_check_routes(&self.options.mode) {
+            self.fail(error);
             return;
         }
         self.attempts.clear();
@@ -791,7 +841,13 @@ impl App {
             self.status = "Export failed: validated export directory is unavailable".into();
             return;
         };
-        match export::export(identity, &client_public_key, &target, directory) {
+        match export::export(
+            identity,
+            &client_public_key,
+            &target,
+            directory,
+            &self.allowed_ips,
+        ) {
             Ok(path) => {
                 let display_path = export_display_path(&self.export_directory, &path);
                 self.status = format!("Exported {}", display_path.display());
@@ -966,6 +1022,20 @@ mod tests {
         assert!(app.key_path.is_empty());
         assert!(app.pasted_key.is_empty());
         assert_eq!(app.export_directory.as_str(), "./nordprobe-exports");
+        assert!(app.bypass_input.is_empty());
+        assert_eq!(app.allowed_ips_summary(), "AllowedIPs 0.0.0.0/0");
+    }
+
+    #[test]
+    fn bypasses_update_full_check_routes_and_reject_bypassed_targets() {
+        let mut app = App::new();
+        app.toggle_mode();
+        app.set_bypasses("1.1.1.1/32".into()).unwrap();
+        assert!(probing::validate_check_routes(&app.options.mode).is_err());
+
+        app.set_bypasses("10.0.0.0/8".into()).unwrap();
+        assert!(probing::validate_check_routes(&app.options.mode).is_ok());
+        assert!(app.allowed_ips_summary().contains("generated"));
     }
 
     #[test]

@@ -16,6 +16,10 @@ requiring administrator access.
 | Add WireGuard verification to a Node application | [`wgprobe` npm package](node/README.md) | Typed asynchronous Node.js bindings with native packages for Linux, macOS, and Windows |
 | Find a working NordVPN endpoint | [`nordprobe`](crates/nordprobe/README.md) | A guided provider workflow built on `wgprobe`, with public inventory, safe pacing, confirmation, and export |
 
+Both native CLIs can generate a minimal WireGuard `AllowedIPs` list from
+repeatable `--bypass` CIDRs. Nordprobe also applies those bypasses to TUI and
+`find` exports.
+
 The `wgprobe` CLI and Rust library are the foundation. The Python and Node.js
 packages expose the same core for automation. `nordprobe` builds on it with the
 inventory and workflow needed for NordVPN; the core itself never contacts a

@@ -53,10 +53,10 @@ rejected.
 
 ## Rust Library
 
-The crate exposes `ProbeConfig`, `ProbePlan`, `probe`, progress events, and
-serializable reports. Configuration and plan validation return errors before
-network work; operational failures after probing starts are represented in the
-report.
+The crate exposes `ProbeConfig`, `ProbePlan`, `probe`,
+`allowed_ips_excluding`, progress events, and serializable reports.
+Configuration and plan validation return errors before network work;
+operational failures after probing starts are represented in the report.
 
 ## Input Modes
 
@@ -66,6 +66,23 @@ report.
 | Raw key | `--private-key-file`, `--peer-key`, `--endpoint` | `--address` and one or more `--allowed-ip` | `--dns-server` |
 
 Run `wgprobe --help` for complete raw-key syntax.
+
+## AllowedIPs Generator
+
+Generate a minimal IPv4 `AllowedIPs` list that routes selected CIDRs outside a
+WireGuard tunnel:
+
+```sh
+target/release/wgprobe --bypass 10.0.0.0/8 \
+  --bypass 172.16.0.0/12 \
+  --bypass 192.168.0.0/16
+```
+
+The command prints one `AllowedIPs = ...` line. `--bypass` is repeatable and
+also accepts comma-separated values. The generator normalizes host bits,
+duplicates, and overlapping CIDRs before it produces the smallest deterministic
+IPv4 route list. It rejects `0.0.0.0/0` because that bypass leaves no tunnel
+route.
 
 ## Ping and DNS Checks
 

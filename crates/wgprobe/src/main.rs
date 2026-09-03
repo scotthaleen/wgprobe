@@ -10,7 +10,7 @@ use std::time::Duration;
 use clap::{Parser, ValueEnum};
 use wgprobe::{
     Ipv4Cidr, PhaseStatus, ProbeConfig, ProbeEvent, ProbeEventKind, ProbePlan, ProbeReport,
-    Verdict, probe,
+    Verdict, allowed_ips_excluding, probe,
 };
 use zeroize::Zeroizing;
 
@@ -64,10 +64,36 @@ fn paint(enabled: bool, code: u8, value: impl std::fmt::Display) -> String {
 struct Cli {
     /// WireGuard configuration file, or - to read it from stdin
     #[arg(
-        required_unless_present = "private_key_file",
-        conflicts_with = "private_key_file"
+        required_unless_present_any = ["private_key_file", "bypass"],
+        conflicts_with_all = ["private_key_file", "bypass"]
     )]
     config: Option<PathBuf>,
+
+    /// Generate AllowedIPs that route this IPv4 CIDR outside the tunnel (repeatable)
+    #[arg(
+        long,
+        value_name = "CIDR",
+        value_delimiter = ',',
+        conflicts_with_all = [
+            "private_key_file",
+            "peer_key",
+            "endpoint",
+            "ping",
+            "resolve",
+            "dns_server",
+            "address",
+            "allowed_ip",
+            "timeout_ms",
+            "ping_timeout_ms",
+            "dns_timeout_ms",
+            "deadline_ms",
+            "json",
+            "quiet",
+            "redact",
+            "color"
+        ]
+    )]
+    bypass: Vec<String>,
 
     /// File containing only the base64 client private key
     #[arg(long, requires_all = ["peer_key", "endpoint"])]
@@ -146,6 +172,10 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<bool, String> {
+    if !cli.bypass.is_empty() {
+        println!("{}", allowed_ips_line(&cli.bypass)?);
+        return Ok(true);
+    }
     let colors = ColorPolicy::new(cli.color);
     let raw_mode = cli.private_key_file.is_some();
     let mut config = if let Some(private_key_file) = cli.private_key_file {
@@ -159,7 +189,9 @@ fn run(cli: Cli) -> Result<bool, String> {
         )
         .map_err(|error| format!("invalid probe keys: {error}"))?
     } else {
-        let config_path = cli.config.expect("required by clap");
+        let config_path = cli.config.ok_or_else(|| {
+            "provide a WireGuard configuration or use --private-key-file".to_owned()
+        })?;
         let contents = if config_path.as_os_str() == OsStr::new("-") {
             read_bounded(
                 io::stdin().lock(),
@@ -330,6 +362,25 @@ fn parse_cidr(value: &str, option: &str) -> Result<Ipv4Cidr, String> {
         .map_err(|_| format!("{option} must be an IPv4 CIDR, got {value}"))
 }
 
+fn allowed_ips_line(values: &[String]) -> Result<String, String> {
+    let bypasses = values
+        .iter()
+        .map(|value| parse_cidr(value, "--bypass"))
+        .collect::<Result<Vec<_>, _>>()?;
+    let allowed = allowed_ips_excluding(&bypasses);
+    if allowed.is_empty() {
+        return Err("--bypass excludes all IPv4 addresses".into());
+    }
+    Ok(format!(
+        "AllowedIPs = {}",
+        allowed
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
 fn print_progress(event: &ProbeEvent, colors: &ColorPolicy) {
     match event.kind {
         ProbeEventKind::Started => eprintln!(
@@ -474,11 +525,15 @@ mod tests {
     #[test]
     fn legacy_config_invocation_is_handshake_only() {
         let cli = Cli::try_parse_from(["wgprobe", "test.conf"]).unwrap();
+        assert!(cli.bypass.is_empty());
         assert!(cli.ping.is_empty());
         assert!(cli.resolve.is_empty());
         assert_eq!(cli.timeout_ms, 3000);
         assert_eq!(cli.deadline_ms, 9000);
         assert_eq!(cli.color, ColorChoice::Auto);
+
+        let reserved_name = Cli::try_parse_from(["wgprobe", "allowed-ips"]).unwrap();
+        assert_eq!(reserved_name.config, Some(PathBuf::from("allowed-ips")));
     }
 
     #[test]
@@ -577,6 +632,22 @@ mod tests {
             "10.0.0.2/32",
         ]);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn generates_allowed_ips_from_repeatable_bypasses() {
+        let cli = Cli::try_parse_from(["wgprobe", "--bypass", "128.0.0.0/2,192.0.0.0/2"]).unwrap();
+        assert_eq!(cli.bypass, ["128.0.0.0/2", "192.0.0.0/2"]);
+        assert_eq!(
+            allowed_ips_line(&cli.bypass).unwrap(),
+            "AllowedIPs = 0.0.0.0/1"
+        );
+    }
+
+    #[test]
+    fn allowed_ips_rejects_invalid_and_all_ipv4_bypasses() {
+        assert!(allowed_ips_line(&["invalid".into()]).is_err());
+        assert!(allowed_ips_line(&["0.0.0.0/0".into()]).is_err());
     }
 
     #[test]

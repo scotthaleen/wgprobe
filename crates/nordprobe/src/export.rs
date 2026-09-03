@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use thiserror::Error;
+use wgprobe::Ipv4Cidr;
 use zeroize::Zeroizing;
 
 use crate::inventory::NordTarget;
@@ -47,8 +48,16 @@ pub fn export(
     expected_public_key: &str,
     target: &NordTarget,
     directory: &Path,
+    allowed_ips: &[Ipv4Cidr],
 ) -> Result<PathBuf, ExportError> {
-    export_to(identity, expected_public_key, target, directory, &|| false)
+    export_to(
+        identity,
+        expected_public_key,
+        target,
+        directory,
+        allowed_ips,
+        &|| false,
+    )
 }
 
 pub fn export_interruptible(
@@ -56,11 +65,17 @@ pub fn export_interruptible(
     expected_public_key: &str,
     target: &NordTarget,
     directory: &Path,
+    allowed_ips: &[Ipv4Cidr],
     interrupted: &AtomicBool,
 ) -> Result<PathBuf, ExportError> {
-    export_to(identity, expected_public_key, target, directory, &|| {
-        interrupted.load(Ordering::Acquire)
-    })
+    export_to(
+        identity,
+        expected_public_key,
+        target,
+        directory,
+        allowed_ips,
+        &|| interrupted.load(Ordering::Acquire),
+    )
 }
 
 fn export_to(
@@ -68,6 +83,7 @@ fn export_to(
     expected_public_key: &str,
     target: &NordTarget,
     root: &Path,
+    allowed_ips: &[Ipv4Cidr],
     cancelled: &dyn Fn() -> bool,
 ) -> Result<PathBuf, ExportError> {
     if cancelled() {
@@ -95,10 +111,12 @@ fn export_to(
         }
         match secure_create(&path) {
             Ok(file) => {
+                let allowed_ips = crate::routes::format_allowed_ips(allowed_ips);
                 let config = Zeroizing::new(format!(
-                    "[Interface]\nPrivateKey = {}\nAddress = 10.5.0.2/32\nDNS = 103.86.96.100,103.86.99.100\n\n[Peer]\nPublicKey = {}\nAllowedIPs = 0.0.0.0/0\nEndpoint = {}\nPersistentKeepalive = 25\n",
+                    "[Interface]\nPrivateKey = {}\nAddress = 10.5.0.2/32\nDNS = 103.86.96.100,103.86.99.100\n\n[Peer]\nPublicKey = {}\nAllowedIPs = {}\nEndpoint = {}\nPersistentKeepalive = 25\n",
                     identity.private_key(),
                     target.public_key,
+                    allowed_ips,
                     target.endpoint
                 ));
                 if cancelled() {
@@ -332,6 +350,10 @@ mod tests {
         }
     }
 
+    fn default_allowed_ips() -> Vec<Ipv4Cidr> {
+        vec!["0.0.0.0/0".parse().unwrap()]
+    }
+
     struct FailingWriter {
         file: fs::File,
         bytes_before_failure: usize,
@@ -357,9 +379,14 @@ mod tests {
     fn rejects_identity_mismatch_before_writing() {
         let directory = tempfile::tempdir().unwrap();
         let identity = RunIdentity::parse(KEY).unwrap();
-        let error = export_to(&identity, "different", &target(), directory.path(), &|| {
-            false
-        })
+        let error = export_to(
+            &identity,
+            "different",
+            &target(),
+            directory.path(),
+            &default_allowed_ips(),
+            &|| false,
+        )
         .unwrap_err();
         assert!(matches!(error, ExportError::IdentityMismatch));
         assert!(!directory.path().join("exports").exists());
@@ -372,18 +399,31 @@ mod tests {
             .unwrap()
             .join("nordprobe-exports");
         let identity = RunIdentity::parse(KEY).unwrap();
-        let first = export_to(&identity, identity.public_key(), &target(), &root, &|| {
-            false
-        })
+        let allowed_ips = vec!["0.0.0.0/1".parse().unwrap()];
+        let first = export_to(
+            &identity,
+            identity.public_key(),
+            &target(),
+            &root,
+            &allowed_ips,
+            &|| false,
+        )
         .unwrap();
-        let second = export_to(&identity, identity.public_key(), &target(), &root, &|| {
-            false
-        })
+        let second = export_to(
+            &identity,
+            identity.public_key(),
+            &target(),
+            &root,
+            &allowed_ips,
+            &|| false,
+        )
         .unwrap();
         assert_ne!(first, second);
         assert_eq!(first.file_name().unwrap(), "_bad_host.conf");
         assert_eq!(second.file_name().unwrap(), "_bad_host-1.conf");
-        assert!(fs::read_to_string(&first).unwrap().contains(KEY));
+        let contents = fs::read_to_string(&first).unwrap();
+        assert!(contents.contains(KEY));
+        assert!(contents.contains("AllowedIPs = 0.0.0.0/1"));
 
         #[cfg(unix)]
         {
@@ -410,9 +450,14 @@ mod tests {
         fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
         let identity = RunIdentity::parse(KEY).unwrap();
 
-        export_to(&identity, identity.public_key(), &target(), &root, &|| {
-            false
-        })
+        export_to(
+            &identity,
+            identity.public_key(),
+            &target(),
+            &root,
+            &default_allowed_ips(),
+            &|| false,
+        )
         .unwrap();
 
         assert_eq!(
@@ -433,9 +478,14 @@ mod tests {
         let root = base.join("nordprobe");
         symlink(&destination, &root).unwrap();
         let identity = RunIdentity::parse(KEY).unwrap();
-        let error = export_to(&identity, identity.public_key(), &target(), &root, &|| {
-            false
-        })
+        let error = export_to(
+            &identity,
+            identity.public_key(),
+            &target(),
+            &root,
+            &default_allowed_ips(),
+            &|| false,
+        )
         .unwrap_err();
         assert!(matches!(error, ExportError::SymlinkDirectory(path) if path == root));
     }
@@ -454,9 +504,14 @@ mod tests {
         let root = link.join("nested-export");
         let identity = RunIdentity::parse(KEY).unwrap();
 
-        let error = export_to(&identity, identity.public_key(), &target(), &root, &|| {
-            false
-        })
+        let error = export_to(
+            &identity,
+            identity.public_key(),
+            &target(),
+            &root,
+            &default_allowed_ips(),
+            &|| false,
+        )
         .unwrap_err();
 
         assert!(matches!(error, ExportError::SymlinkDirectory(path) if path == link));
@@ -475,6 +530,7 @@ mod tests {
             identity.public_key(),
             &target(),
             &root,
+            &default_allowed_ips(),
             &interrupted,
         )
         .unwrap_err();
