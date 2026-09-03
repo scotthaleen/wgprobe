@@ -201,6 +201,63 @@ impl fmt::Display for Ipv4Cidr {
     }
 }
 
+/// Return the minimal canonical CIDRs covering every IPv4 address outside `excluded`.
+pub fn allowed_ips_excluding(excluded: &[Ipv4Cidr]) -> Vec<Ipv4Cidr> {
+    const IPV4_MAX: u64 = u32::MAX as u64;
+
+    let mut excluded_ranges: Vec<_> = excluded
+        .iter()
+        .map(|cidr| {
+            let block_size = 1u64 << (32 - cidr.prefix);
+            let start = u64::from(u32::from(cidr.address)) & !(block_size - 1);
+            (start, start + block_size - 1)
+        })
+        .collect();
+    excluded_ranges.sort_unstable();
+
+    let mut merged: Vec<(u64, u64)> = Vec::with_capacity(excluded_ranges.len());
+    for (start, end) in excluded_ranges {
+        if let Some((_, merged_end)) = merged.last_mut()
+            && start <= *merged_end + 1
+        {
+            *merged_end = (*merged_end).max(end);
+        } else {
+            merged.push((start, end));
+        }
+    }
+
+    let mut allowed = Vec::new();
+    let mut cursor = 0;
+    for (start, end) in merged {
+        if cursor < start {
+            append_cidr_range(&mut allowed, cursor, start - 1);
+        }
+        cursor = end + 1;
+    }
+    if cursor <= IPV4_MAX {
+        append_cidr_range(&mut allowed, cursor, IPV4_MAX);
+    }
+    allowed
+}
+
+fn append_cidr_range(cidrs: &mut Vec<Ipv4Cidr>, mut start: u64, end: u64) {
+    while start <= end {
+        let aligned_size = if start == 0 {
+            1u64 << 32
+        } else {
+            1u64 << start.trailing_zeros()
+        };
+        let remaining = end - start + 1;
+        let remaining_size = 1u64 << (63 - remaining.leading_zeros());
+        let block_size = aligned_size.min(remaining_size);
+        cidrs.push(Ipv4Cidr {
+            address: Ipv4Addr::from(start as u32),
+            prefix: 32 - block_size.trailing_zeros() as u8,
+        });
+        start += block_size;
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Section {
     None,
@@ -320,5 +377,82 @@ mod tests {
         let cidr: Ipv4Cidr = "192.0.2.7/24".parse().unwrap();
         assert!(cidr.contains("192.0.2.200".parse().unwrap()));
         assert!(!cidr.contains("192.0.3.1".parse().unwrap()));
+    }
+
+    fn cidrs(values: &[&str]) -> Vec<Ipv4Cidr> {
+        values.iter().map(|value| value.parse().unwrap()).collect()
+    }
+
+    #[test]
+    fn complement_of_empty_exclusions_is_default_route() {
+        assert_eq!(allowed_ips_excluding(&[]), cidrs(&["0.0.0.0/0"]));
+    }
+
+    #[test]
+    fn complement_of_one_subnet_is_minimal() {
+        assert_eq!(
+            allowed_ips_excluding(&cidrs(&["128.0.0.0/1"])),
+            cidrs(&["0.0.0.0/1"])
+        );
+    }
+
+    #[test]
+    fn complement_normalizes_duplicates_overlap_and_adjacency() {
+        let combined = cidrs(&[
+            "192.0.2.63/25",
+            "192.0.2.200/25",
+            "192.0.2.129/26",
+            "192.0.2.0/25",
+        ]);
+        assert_eq!(
+            allowed_ips_excluding(&combined),
+            allowed_ips_excluding(&cidrs(&["192.0.2.0/24"]))
+        );
+    }
+
+    #[test]
+    fn complement_of_default_route_is_empty() {
+        assert!(allowed_ips_excluding(&cidrs(&["203.0.113.7/0"])).is_empty());
+    }
+
+    #[test]
+    fn complement_handles_both_address_boundaries() {
+        let result = allowed_ips_excluding(&cidrs(&["0.0.0.0/32", "255.255.255.255/32"]));
+        assert_eq!(result.len(), 62);
+        assert_eq!(result.first(), Some(&cidrs(&["0.0.0.1/32"])[0]));
+        assert_eq!(result.last(), Some(&cidrs(&["255.255.255.254/32"])[0]));
+        let covered: u64 = result.iter().map(|cidr| 1u64 << (32 - cidr.prefix)).sum();
+        assert_eq!(covered, (1u64 << 32) - 2);
+    }
+
+    #[test]
+    fn complement_is_canonical_disjoint_and_matches_exclusions() {
+        let excluded = cidrs(&[
+            "10.0.0.7/30",
+            "10.0.0.128/25",
+            "10.0.1.0/24",
+            "192.0.2.64/26",
+        ]);
+        let allowed = allowed_ips_excluding(&excluded);
+
+        let bounds = allowed
+            .iter()
+            .map(|cidr| {
+                let size = 1u64 << (32 - cidr.prefix);
+                let start = u64::from(u32::from(cidr.address));
+                assert_eq!(start % size, 0, "noncanonical CIDR: {cidr}");
+                (start, start + size - 1)
+            })
+            .collect::<Vec<_>>();
+        assert!(bounds.windows(2).all(|pair| pair[0].1 < pair[1].0));
+
+        for suffix in 0..=u16::MAX {
+            let address = Ipv4Addr::from(u32::from(Ipv4Addr::new(10, 0, 0, 0)) + u32::from(suffix));
+            assert_eq!(
+                allowed.iter().any(|cidr| cidr.contains(address)),
+                !excluded.iter().any(|cidr| cidr.contains(address)),
+                "coverage mismatch for {address}"
+            );
+        }
     }
 }

@@ -13,6 +13,7 @@ use crossterm::event::{
 use crossterm::terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode};
 use crossterm::{execute, queue};
 use unicode_width::UnicodeWidthChar;
+use wgprobe::Ipv4Cidr;
 
 use crate::app::{export_display_path, resolve_export_directory_path};
 use crate::export;
@@ -76,6 +77,7 @@ fn paint(enabled: bool, code: u8, value: impl std::fmt::Display) -> String {
 pub struct FindOptions {
     pub key_file: PathBuf,
     pub export_directory: PathBuf,
+    pub bypass_input: String,
     pub query: Option<String>,
     pub country: Option<String>,
     pub city: Option<String>,
@@ -89,7 +91,7 @@ pub struct FindOptions {
 }
 
 impl FindOptions {
-    fn check_mode(&self) -> CheckMode {
+    fn check_mode(&self, allowed_ips: Vec<Ipv4Cidr>) -> CheckMode {
         let custom = !self.ping_targets.is_empty()
             || !self.resolve_names.is_empty()
             || self.dns_server.is_some();
@@ -110,6 +112,7 @@ impl FindOptions {
                 self.resolve_names.clone()
             },
             dns_server: self.dns_server.unwrap_or(defaults.dns_server),
+            allowed_ips,
         })
     }
 }
@@ -118,6 +121,9 @@ pub fn run(options: FindOptions) -> Result<(), String> {
     if !(1..=100).contains(&options.max_candidates) {
         return Err("--max-candidates must be from 1 through 100".into());
     }
+    let allowed_ips = crate::routes::export_allowed_ips(&options.bypass_input)?;
+    let check_mode = options.check_mode(allowed_ips.clone());
+    crate::probing::validate_check_routes(&check_mode)?;
     let export_directory = resolve_export_directory_path(&options.export_directory)?;
     let colors = ColorPolicy::new(options.color);
     let identity =
@@ -151,7 +157,7 @@ pub fn run(options: FindOptions) -> Result<(), String> {
         Arc::clone(&identity),
         targets,
         options.max_candidates,
-        options.check_mode(),
+        check_mode,
         Arc::clone(&interrupted),
         &colors,
     )?;
@@ -163,6 +169,7 @@ pub fn run(options: FindOptions) -> Result<(), String> {
         &confirmed.client_public_key,
         &confirmed.target,
         &export_directory,
+        &allowed_ips,
         &interrupted,
     )
     .map_err(|error| format!("confirmed endpoint export failed: {error}"))?;
@@ -665,6 +672,7 @@ mod tests {
         let options = FindOptions {
             key_file: "missing".into(),
             export_directory: "exports".into(),
+            bypass_input: String::new(),
             query: None,
             country: None,
             city: None,
@@ -716,6 +724,7 @@ mod tests {
         let options = FindOptions {
             key_file: "missing".into(),
             export_directory: "exports".into(),
+            bypass_input: String::new(),
             query: None,
             country: None,
             city: None,
@@ -729,11 +738,12 @@ mod tests {
         };
 
         assert_eq!(
-            options.check_mode(),
+            options.check_mode(crate::routes::allowed_ips("").unwrap()),
             CheckMode::Full(FullCheckPlan {
                 ping_targets: vec![Ipv4Addr::new(8, 8, 8, 8)],
                 resolve_names: vec!["google.com".into()],
                 dns_server: Ipv4Addr::new(8, 8, 4, 4),
+                allowed_ips: vec!["0.0.0.0/0".parse().unwrap()],
             })
         );
     }

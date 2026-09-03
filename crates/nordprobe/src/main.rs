@@ -5,6 +5,7 @@ mod finder;
 mod inventory;
 mod key;
 mod probing;
+mod routes;
 mod scheduler;
 mod ui;
 
@@ -37,12 +38,18 @@ struct Cli {
     #[arg(long, value_name = "PATH", global = true)]
     export_directory: Option<PathBuf>,
 
+    /// Route this IPv4 CIDR outside the exported tunnel (TUI/find/allowed-ips; repeatable)
+    #[arg(long, value_name = "CIDR", global = true, value_delimiter = ',')]
+    bypass: Vec<String>,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Generate IPv4 WireGuard AllowedIPs after bypassing CIDRs
+    AllowedIps,
     /// Fetch public inventory and list available cities without reading a key
     Cities {
         /// Include only this country (case-insensitive exact match)
@@ -109,63 +116,83 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<(), String> {
-    match (cli.command, cli.key_file, cli.export_directory) {
-        (Some(Command::Cities { .. }), Some(_), _) => {
-            Err("--key-file is available only with the TUI or find".into())
+    let Cli {
+        key_file,
+        export_directory,
+        bypass,
+        command,
+    } = cli;
+    let bypass_input = bypass.join(",");
+    match command {
+        Some(Command::AllowedIps) => {
+            if key_file.is_some() {
+                return Err("--key-file is available only with the TUI or find".into());
+            }
+            if export_directory.is_some() {
+                return Err("--export-directory is available only with the TUI or find".into());
+            }
+            println!("{}", routes::allowed_ips_line(&bypass_input)?);
+            Ok(())
         }
-        (Some(Command::Cities { .. }), None, Some(_)) => {
-            Err("--export-directory is available only with the TUI or find".into())
+        Some(Command::Cities { country }) => {
+            if key_file.is_some() {
+                return Err("--key-file is available only with the TUI or find".into());
+            }
+            if export_directory.is_some() {
+                return Err("--export-directory is available only with the TUI or find".into());
+            }
+            if !bypass.is_empty() {
+                return Err("--bypass is available only with the TUI, find, or allowed-ips".into());
+            }
+            list_cities(country.as_deref())
         }
-        (Some(Command::Cities { country }), None, None) => list_cities(country.as_deref()),
-        (
-            Some(Command::Find {
-                query,
-                country,
-                city,
-                refresh,
-                full,
-                ping,
-                resolve,
-                dns_server,
-                max_candidates,
-                color,
-            }),
-            Some(key_file),
-            export_directory,
-        ) => finder::run(finder::FindOptions {
-            key_file,
-            export_directory: export_directory
-                .unwrap_or_else(|| PathBuf::from("./nordprobe-exports")),
+        Some(Command::Find {
             query,
             country,
             city,
             refresh,
             full,
-            ping_targets: ping,
-            resolve_names: resolve,
+            ping,
+            resolve,
             dns_server,
             max_candidates,
             color,
-        }),
-        (Some(Command::Find { .. }), None, _) => Err("find requires --key-file <PATH>".into()),
-        (Some(Command::Key { .. }), Some(_), _) => {
-            Err("--key-file is available only with the TUI or find".into())
+        }) => {
+            let key_file = key_file.ok_or_else(|| "find requires --key-file <PATH>".to_owned())?;
+            finder::run(finder::FindOptions {
+                key_file,
+                export_directory: export_directory
+                    .unwrap_or_else(|| PathBuf::from("./nordprobe-exports")),
+                bypass_input,
+                query,
+                country,
+                city,
+                refresh,
+                full,
+                ping_targets: ping,
+                resolve_names: resolve,
+                dns_server,
+                max_candidates,
+                color,
+            })
         }
-        (Some(Command::Key { .. }), None, Some(_)) => {
-            Err("--export-directory is available only with the TUI or find".into())
-        }
-        (
-            Some(Command::Key {
-                command: KeyCommand::Fetch { output },
-            }),
-            None,
-            None,
-        ) => {
+        Some(Command::Key {
+            command: KeyCommand::Fetch { output },
+        }) => {
+            if key_file.is_some() {
+                return Err("--key-file is available only with the TUI or find".into());
+            }
+            if export_directory.is_some() {
+                return Err("--export-directory is available only with the TUI or find".into());
+            }
+            if !bypass.is_empty() {
+                return Err("--bypass is available only with the TUI, find, or allowed-ips".into());
+            }
             let path = credentials::fetch_to(&output)?;
             println!("Wrote NordLynx private key to {}", path.display());
             Ok(())
         }
-        (None, key_file, export_directory) => run_tui(key_file, export_directory),
+        None => run_tui(key_file, export_directory, bypass_input),
     }
 }
 
@@ -195,13 +222,18 @@ fn filtered_cities(
     Ok(cities)
 }
 
-fn run_tui(key_file: Option<PathBuf>, export_directory: Option<PathBuf>) -> Result<(), String> {
+fn run_tui(
+    key_file: Option<PathBuf>,
+    export_directory: Option<PathBuf>,
+    bypass_input: String,
+) -> Result<(), String> {
     install_panic_restore();
     let mut terminal = TerminalSession::enter().map_err(|error| error.to_string())?;
     let mut app = App::new();
     if let Some(path) = export_directory {
         app.set_export_directory(path)?;
     }
+    app.set_bypasses(bypass_input)?;
     if let Some(path) = key_file {
         app.preload_key_file(path)?;
     }
@@ -337,10 +369,28 @@ mod tests {
             "private-key",
             "--export-directory",
             "exports",
+            "--bypass",
+            "10.0.0.0/8,192.168.0.0/16",
         ])
         .unwrap();
         assert_eq!(cli.key_file, Some(PathBuf::from("private-key")));
         assert_eq!(cli.export_directory, Some(PathBuf::from("exports")));
+        assert_eq!(cli.bypass, ["10.0.0.0/8", "192.168.0.0/16"]);
+    }
+
+    #[test]
+    fn parses_allowed_ips_generator() {
+        let cli = Cli::try_parse_from([
+            "nordprobe",
+            "allowed-ips",
+            "--bypass",
+            "10.0.0.0/8",
+            "--bypass",
+            "192.168.0.0/16",
+        ])
+        .unwrap();
+        assert!(matches!(cli.command, Some(Command::AllowedIps)));
+        assert_eq!(cli.bypass.len(), 2);
     }
 
     #[test]

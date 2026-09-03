@@ -64,11 +64,12 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, screen: Screen) {
 }
 
 fn draw_setup(frame: &mut Frame<'_>, area: Rect, app: &App) {
-    let inner = centered(area, 82, 24);
+    let inner = centered(area, 82, 27);
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(4),
+            Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
@@ -142,9 +143,25 @@ fn draw_setup(frame: &mut Frame<'_>, area: Rect, app: &App) {
             ),
         rows[3],
     );
+    let bypass_border = if app.setup_focus == 3 { ACCENT } else { MUTED };
+    frame.render_widget(
+        Paragraph::new(app.bypass_input.as_str())
+            .scroll((
+                0,
+                horizontal_scroll(&app.bypass_input, rows[4].width.saturating_sub(2)),
+            ))
+            .block(
+                Block::default()
+                    .title(" Bypass CIDRs (optional; comma or space separated) ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(bypass_border)),
+            ),
+        rows[4],
+    );
     match app.setup_focus {
         1 => set_text_cursor(frame, rows[2], &key_value),
         2 => set_text_cursor(frame, rows[3], &export_value),
+        3 => set_text_cursor(frame, rows[4], &app.bypass_input),
         _ => {}
     }
     frame.render_widget(
@@ -158,13 +175,13 @@ fn draw_setup(frame: &mut Frame<'_>, area: Rect, app: &App) {
             ),
             Line::styled(&app.status, Style::default().fg(MUTED)),
         ]),
-        rows[4],
+        rows[5],
     );
     frame.render_widget(
         Paragraph::new("No key source is selected automatically. Tab moves between controls; Enter validates and continues. Paste mode never saves the source key, but exported WireGuard configurations contain it. Clipboard history remains outside nordprobe's control.")
             .style(Style::default().fg(MUTED))
             .wrap(Wrap { trim: true }),
-        rows[5],
+        rows[6],
     );
 }
 
@@ -298,7 +315,10 @@ fn draw_probe_setup(frame: &mut Frame<'_>, area: Rect, app: &App) {
         Line::raw(""),
         Line::raw("The budget can exceed the goal so failures have fallback candidates."),
         Line::styled("FULL DEFAULTS", Style::default().fg(MUTED).add_modifier(Modifier::BOLD)),
-        Line::raw("Address 10.5.0.2/32  DNS 103.86.96.100  AllowedIPs 0.0.0.0/0"),
+        Line::raw(format!(
+            "Address 10.5.0.2/32  DNS 103.86.96.100  {}",
+            app.allowed_ips_summary()
+        )),
         Line::raw("Ping 1.1.1.1  Resolve example.com"),
         Line::raw(""),
         Line::raw("Maximum four public-key groups run concurrently. Starts in one group are at least six seconds apart."),
