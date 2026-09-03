@@ -66,10 +66,11 @@ configuration for packages that do not exist.
 6. Wait for the full CI suite, then squash-merge the pull request.
 7. Confirm that the Release workflow creates the matching tag and publishes:
 
-   - eight native archives;
+   - ten native archives;
    - five Python 3.10+ ABI3 wheels;
    - five Node-API addons;
    - `install.sh`;
+   - `install.ps1`;
    - `SHA256SUMS`; and
    - GitHub artifact attestations.
 
@@ -77,8 +78,8 @@ configuration for packages that do not exist.
    `wgprobe==MAJOR.MINOR.PATCH` installation succeeds.
 9. Confirm that npm contains the root package and all five native packages, then
    run a clean `npm install wgprobe@MAJOR.MINOR.PATCH` smoke test.
-10. Test one Linux installer path and one Homebrew installation before announcing
-   the release.
+10. Test one Linux installer path, one Windows installer path, and one Homebrew
+    installation before announcing the release.
 
 The version can also be prepared locally with:
 

@@ -70,7 +70,9 @@ brew install scotthaleen/wgprobe/wgprobe
 brew install scotthaleen/wgprobe/nordprobe
 ```
 
-### Linux Release Binaries
+### Native Release Binaries
+
+#### Linux
 
 The installer supports x86-64 and ARM64 Linux, verifies each archive against the
 release checksums, and installs both tools under `~/.local/bin` by default:
@@ -83,6 +85,27 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 Pass options through `sh -s --`, for example `--bin wgprobe`, `--version 0.1.0`,
 or `--to /usr/local/bin`. Review [`install.sh`](install.sh) before piping it to a
 shell when required by your security policy.
+
+#### Windows
+
+The PowerShell 7 installer supports x86-64 Windows, verifies each ZIP archive
+against the release checksums, and installs both tools under the current user's
+local application directory by default:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-wgprobe.ps1"
+Invoke-WebRequest `
+  https://github.com/scotthaleen/wgprobe/releases/latest/download/install.ps1 `
+  -OutFile $installer
+& $installer
+Remove-Item $installer
+```
+
+Review the downloaded script before running it when required by your security
+policy. Use `-Bin wgprobe`, `-Version 0.1.5`, or `-To C:\path\to\bin` to override
+the defaults. The installer does not modify `PATH`; it prints the directory to
+add when necessary. Windows executables are not Authenticode-signed and can
+trigger a Microsoft Defender SmartScreen warning.
 
 Install the Python 3.10+ package from PyPI:
 
@@ -109,6 +132,9 @@ Build both native tools from the workspace root:
 ```sh
 cargo build --release
 ```
+
+On Windows, the executables are `target\release\wgprobe.exe` and
+`target\release\nordprobe.exe`.
 
 **Warning:** A WireGuard configuration contains a private key and can contain a
 preshared key. Restrict its permissions and keep it out of version control.

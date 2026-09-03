@@ -1110,7 +1110,9 @@ mod tests {
         let resolved = resolve_export_directory("custom-exports").unwrap();
         assert_eq!(
             resolved,
-            std::env::current_dir().unwrap().join("custom-exports")
+            std::fs::canonicalize(std::env::current_dir().unwrap())
+                .unwrap()
+                .join("custom-exports")
         );
     }
 
@@ -1122,7 +1124,7 @@ mod tests {
             .join("server.conf");
         assert_eq!(
             export_display_path("./exports", &written),
-            PathBuf::from("./exports/server.conf")
+            PathBuf::from("./exports").join("server.conf")
         );
         let absolute_input = written.parent().unwrap().display().to_string();
         assert_eq!(export_display_path(&absolute_input, &written), written);
@@ -1138,7 +1140,7 @@ mod tests {
         assert_eq!(
             app.validated_export_directory.as_deref(),
             Some(
-                std::env::current_dir()
+                std::fs::canonicalize(std::env::current_dir().unwrap())
                     .unwrap()
                     .join("custom-exports")
                     .as_path()

@@ -246,6 +246,12 @@ fn reject_symlink_components(path: &Path) -> Result<(), ExportError> {
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component);
+        if matches!(
+            component,
+            std::path::Component::Prefix(_) | std::path::Component::RootDir
+        ) {
+            continue;
+        }
         match fs::symlink_metadata(&current) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 return Err(ExportError::SymlinkDirectory(current));

@@ -51,8 +51,10 @@ The native command requires Unix so it can create the file atomically with mode
 or prints the token or key. Revoke the access token in Nord Account when it is no
 longer needed.
 
-On other platforms, obtain the key on a trusted Unix system and transfer it
-using platform-appropriate access controls.
+On Windows, obtain the key on a trusted Unix system and transfer it using
+platform-appropriate access controls. `key fetch` remains unavailable because
+Nordprobe does not yet create a user-only Windows access control list for the
+new key file.
 
 Nord documents [access-token generation](https://support.nordvpn.com/hc/en-us/articles/20286980309265-How-to-log-in-to-NordVPN-without-a-GUI-using-a-token),
 and its [official open-source client](https://github.com/NordSecurity/libtelio/blob/main/clis/nordvpnlite/src/core_api.rs)
@@ -64,6 +66,13 @@ Build and launch from the workspace root:
 
 ```sh
 cargo run -p nordprobe --release
+```
+
+On Windows PowerShell, build and launch with:
+
+```powershell
+cargo build -p nordprobe --release
+.\target\release\nordprobe.exe
 ```
 
 The TUI displays its controls on each screen. `--key-file` bypasses Setup;
@@ -166,10 +175,11 @@ document fails the request. The inventory API provides no token or private key.
 API status and load are selection hints, not authentication evidence.
 
 Normalized inventory is stored as `nordprobe/inventory.json` under the platform
-cache directory, commonly `~/.cache` on Linux or `~/Library/Caches` on macOS.
-Inventory becomes stale after one day but remains usable and is not refreshed
-automatically. Use `Ctrl-r` in the TUI or `find --refresh`. Failed refreshes keep
-the existing cached or in-memory inventory.
+cache directory, commonly `~/.cache` on Linux, `~/Library/Caches` on macOS, or
+the local application data directory on Windows. Inventory becomes stale after
+one day but remains usable and is not refreshed automatically. Use `Ctrl-r` in
+the TUI or `find --refresh`. Failed refreshes keep the existing cached or
+in-memory inventory.
 
 The blocking HTTPS operation runs in a worker but cannot itself be cancelled.
 Leaving the loading screen discards its eventual result.
@@ -189,7 +199,9 @@ Generated configurations set address `10.5.0.2/32`, Nord DNS servers,
 
 Nordprobe sanitizes filenames and uses numeric suffixes instead of overwriting
 files. On Unix, newly created directories use mode `0700` and files use `0600`;
-existing directory permissions are preserved. Setup resolves existing symlink
+existing directory permissions are preserved. On Windows, new directories and
+files inherit the destination directory's access control list; choose a
+user-only destination before exporting. Setup resolves existing symlink
 components, and export rejects components replaced by symlinks afterward.
 
 These checks prevent ordinary path mistakes, not replacement by a hostile local

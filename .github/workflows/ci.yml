@@ -55,6 +55,10 @@ jobs:
             runner: macos-15-intel
             target: x86_64-apple-darwin
             musl: false
+          - name: windows-x86_64
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            musl: false
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,6 +79,20 @@ jobs:
         run: >-
           cargo build --locked --release -p wgprobe -p nordprobe
           --target "${{ matrix.target }}"
+      - name: Test native tools on Windows
+        if: startsWith(matrix.name, 'windows-')
+        shell: pwsh
+        run: |
+          cargo test --locked -p wgprobe -p nordprobe --target "${{ matrix.target }}"
+          if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
+          & "target/${{ matrix.target }}/release/wgprobe.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "wgprobe --version failed" }
+          & "target/${{ matrix.target }}/release/wgprobe.exe" --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "wgprobe --help failed" }
+          & "target/${{ matrix.target }}/release/nordprobe.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "nordprobe --version failed" }
+          & "target/${{ matrix.target }}/release/nordprobe.exe" --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "nordprobe --help failed" }
 
   python-quality:
     name: Python quality
@@ -233,6 +251,42 @@ jobs:
             exit 1
           fi
           grep -F "invalid release version" installer-error.log
+
+  windows-installer:
+    name: Windows installer syntax
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Parse installer
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./install.ps1),
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count -ne 0) {
+            $errors | Format-List | Out-String | Write-Error
+          }
+      - run: ./install.ps1 -Help
+      - name: Reject malformed versions before download
+        shell: pwsh
+        run: |
+          foreach ($version in @("1..2", "vv1.2.3")) {
+            $errorFile = Join-Path $env:RUNNER_TEMP "installer-error-$($version.Replace('.', '-')).log"
+            $process = Start-Process pwsh `
+              -ArgumentList "-NoProfile", "-File", (Resolve-Path ./install.ps1), "-Version", $version `
+              -RedirectStandardError $errorFile -Wait -PassThru
+            $output = Get-Content -LiteralPath $errorFile -Raw
+            if ($process.ExitCode -eq 0) { throw "malformed version was accepted: $version" }
+            if ("$output" -notmatch "invalid release version") {
+              throw "unexpected installer error for ${version}: $output"
+            }
+          }
 
   homebrew:
     name: Homebrew formulas (${{ matrix.name }})
