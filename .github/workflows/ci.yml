@@ -277,8 +277,12 @@ jobs:
         shell: pwsh
         run: |
           foreach ($version in @("1..2", "vv1.2.3")) {
-            $output = & pwsh -NoProfile -File ./install.ps1 -Version $version 2>&1
-            if ($LASTEXITCODE -eq 0) { throw "malformed version was accepted: $version" }
+            $errorFile = Join-Path $env:RUNNER_TEMP "installer-error-$($version.Replace('.', '-')).log"
+            $process = Start-Process pwsh `
+              -ArgumentList "-NoProfile", "-File", (Resolve-Path ./install.ps1), "-Version", $version `
+              -RedirectStandardError $errorFile -Wait -PassThru
+            $output = Get-Content -LiteralPath $errorFile -Raw
+            if ($process.ExitCode -eq 0) { throw "malformed version was accepted: $version" }
             if ("$output" -notmatch "invalid release version") {
               throw "unexpected installer error for ${version}: $output"
             }
