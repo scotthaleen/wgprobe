@@ -217,8 +217,8 @@ exported.
 Generated configurations set address `10.5.0.2/32`, Nord DNS servers, and
 `PersistentKeepalive = 25`. `AllowedIPs` defaults to `0.0.0.0/0`. Each
 `--bypass` value, or each CIDR entered in Setup, is subtracted from that route.
-Nordprobe rejects bypasses that contain either configured Nord DNS server or
-exclude all IPv4 addresses.
+Before export, Nordprobe rejects bypasses that contain either configured Nord
+DNS server. All bypass modes reject inputs that exclude every IPv4 address.
 
 Nordprobe sanitizes filenames and uses numeric suffixes instead of overwriting
 files. On Unix, newly created directories use mode `0700` and files use `0600`;
