@@ -177,6 +177,9 @@ jobs:
           - platform: macos-x86_64
             runner: macos-15-intel
             target: x86_64-apple-darwin
+          - platform: windows-x86_64
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -192,6 +195,8 @@ jobs:
         if: startsWith(matrix.platform, 'linux-')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Build and package binaries
+        if: ${{ !startsWith(matrix.platform, 'windows-') }}
+        shell: bash
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
@@ -217,10 +222,42 @@ jobs:
               file "$verification/$package/$binary" | grep -E 'statically linked|static-pie linked'
             fi
           done
+      - name: Build and package Windows binaries
+        if: startsWith(matrix.platform, 'windows-')
+        shell: pwsh
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          $version = $env:RELEASE_TAG.Substring(1)
+          $env:RUSTFLAGS = "-C target-feature=+crt-static"
+          cargo build --locked --release -p wgprobe -p nordprobe --target $env:TARGET
+          if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          foreach ($binary in @("wgprobe", "nordprobe")) {
+            $source = "target/$env:TARGET/release/$binary.exe"
+            & $source --version
+            if ($LASTEXITCODE -ne 0) { throw "$binary --version failed" }
+            $package = "$binary-$version-$env:PLATFORM"
+            $packageDirectory = "dist/$package"
+            New-Item -ItemType Directory -Force $packageDirectory | Out-Null
+            Copy-Item $source $packageDirectory
+            Copy-Item LICENSE $packageDirectory
+            Copy-Item "crates/$binary/README.md" "$packageDirectory/README.md"
+            $archive = "dist/$package.zip"
+            Compress-Archive -Path $packageDirectory -DestinationPath $archive
+            $verification = Join-Path $env:RUNNER_TEMP "verify-$binary"
+            New-Item -ItemType Directory -Force $verification | Out-Null
+            Expand-Archive -Path $archive -DestinationPath $verification
+            & (Join-Path $verification "$package/$binary.exe") --version
+            if ($LASTEXITCODE -ne 0) { throw "packaged $binary --version failed" }
+          }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-native-${{ matrix.platform }}
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
           if-no-files-found: error
 
   wheels:
@@ -539,6 +576,7 @@ jobs:
       - name: Create checksums
         run: |
           cp install.sh release-assets/install.sh
+          cp install.ps1 release-assets/install.ps1
           cd release-assets
           sha256sum -- * > SHA256SUMS
       - name: Attest release assets

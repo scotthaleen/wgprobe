@@ -38,11 +38,11 @@ impl<W: Write> Write for SingleLockWriter<W> {
             return Ok(buffer.len());
         }
 
-        let mut erase_chunks = buffer.chunks_exact(3);
+        let (erase_chunks, remainder) = buffer.as_chunks::<3>();
         if self.prompt_written
             && !buffer.is_empty()
-            && erase_chunks.by_ref().all(|chunk| chunk == b"\x08 \x08")
-            && erase_chunks.remainder().is_empty()
+            && erase_chunks.iter().all(|chunk| chunk == b"\x08 \x08")
+            && remainder.is_empty()
         {
             return Ok(buffer.len());
         }
@@ -157,7 +157,7 @@ fn normalize_private_key(value: &str) -> Result<Zeroizing<String>, String> {
     if value.len() != 64 {
         return Err("Nord returned an invalid NordLynx private key".into());
     }
-    for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
+    for (index, pair) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         decoded[index] = (hex_nibble(pair[0])? << 4) | hex_nibble(pair[1])?;
     }
     Ok(Zeroizing::new(STANDARD.encode(decoded.as_ref())))
@@ -263,6 +263,16 @@ mod tests {
         assert_eq!(
             String::from_utf8(writer.inner).unwrap(),
             "Nord access token: 🔒\n"
+        );
+    }
+
+    #[cfg(not(unix))]
+    #[test]
+    fn key_fetch_is_rejected_before_prompting_or_network_access() {
+        let error = fetch_to(Path::new("unused-private-key")).unwrap_err();
+        assert_eq!(
+            error,
+            "native key retrieval currently requires Unix mode-0600 file creation"
         );
     }
 

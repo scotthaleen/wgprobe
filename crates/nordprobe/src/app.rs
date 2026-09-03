@@ -1122,7 +1122,7 @@ mod tests {
             .join("server.conf");
         assert_eq!(
             export_display_path("./exports", &written),
-            PathBuf::from("./exports/server.conf")
+            PathBuf::from("./exports").join("server.conf")
         );
         let absolute_input = written.parent().unwrap().display().to_string();
         assert_eq!(export_display_path(&absolute_input, &written), written);

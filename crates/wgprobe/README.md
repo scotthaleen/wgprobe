@@ -13,7 +13,7 @@ Requirements are a Rust toolchain, outbound UDP access, and either a one-peer
 configuration or explicit key-file, peer-key, and endpoint inputs.
 
 Build with `cargo build -p wgprobe --release`. The executable is
-`target/release/wgprobe`.
+`target/release/wgprobe` on Unix and `target\release\wgprobe.exe` on Windows.
 
 **Warning:** Configuration and private-key files contain secrets. Restrict their
 permissions, keep them out of version control, and never put key values in shell
@@ -39,6 +39,12 @@ Run a handshake-only probe:
 
 ```sh
 target/release/wgprobe path/to/test.conf
+```
+
+On Windows PowerShell, run:
+
+```powershell
+.\target\release\wgprobe.exe path\to\test.conf
 ```
 
 Use `-` to read a configuration from standard input. Named configuration and
@@ -91,7 +97,8 @@ data checks are skipped when authentication is not confirmed.
 Color defaults to interactive terminals only and honors `NO_COLOR`. Use
 `--color always` for captured terminal output or `--color never` for stable plain
 text. Human phase results use colored status badges, or bracketed labels without
-color. JSON output never contains ANSI escapes.
+color. JSON output never contains ANSI escapes. Use `--color never` if a legacy
+Windows console does not render ANSI color correctly.
 
 Use `--redact` before sharing a report or terminal recording. It replaces the
 derived client public key and local UDP address with solid bars in human output.
@@ -148,5 +155,10 @@ resolved address is the only address attempted.
 Secret-bearing input uses zeroizing buffers. Reports contain the derived public
 key unless `--redact` is set, but never contain the private or preshared key.
 Treat endpoints, reports, and error details as sensitive operational metadata.
+
+Named paths are checked before opening. Unix additionally uses `O_NOFOLLOW` for
+the open operation. Windows symbolic-link and reparse-point handling does not
+provide the same race resistance, so do not read secrets from directories that
+another user or process can modify.
 
 WireGuard protocol processing uses Cloudflare's BSD-licensed `boringtun` crate.
